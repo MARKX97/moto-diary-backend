@@ -1,0 +1,17 @@
+{
+  "name": "api",
+  "version": "0.1.0",
+  "main": "index.js",
+  "license": "MIT",
+  "scripts": {
+    "lint": "node -c index.js"
+  },
+  "dependencies": {
+    "@cloudbase/logger": "^2.4.0",
+    "jsonwebtoken": "^9.0.2",
+    "tcb-router": "^1.1.0",
+    "uuid": "^9.0.1",
+    "wx-server-sdk": "~2.4.0",
+    "zod": "^3.23.8"
+  }
+}
