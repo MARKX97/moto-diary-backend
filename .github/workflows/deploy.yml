@@ -1,0 +1,75 @@
+name: backend-deploy
+
+on:
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install root deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Install function deps
+        run: pnpm --dir cloudfunctions/api install
+
+      - name: Basic script checks
+        run: |
+          node -c scripts/import-catalog.js
+          node -c scripts/dev-server.js
+          node -c cloudfunctions/api/index.js
+
+  deploy-main:
+    if: github.ref_name == 'main'
+    needs: verify
+    runs-on: ubuntu-latest
+    env:
+      TCB_ENV_ID: ${{ secrets.TCB_ENV_ID }}
+      TENCENTCLOUD_SECRETID: ${{ secrets.TCB_SECRET_ID }}
+      TENCENTCLOUD_SECRETKEY: ${{ secrets.TCB_SECRET_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Validate deploy secrets
+        run: |
+          set -e
+          if [ -z "$TCB_ENV_ID" ] || [ -z "$TENCENTCLOUD_SECRETID" ] || [ -z "$TENCENTCLOUD_SECRETKEY" ]; then
+            echo "Missing deploy secrets for main branch."
+            exit 1
+          fi
+
+      - name: Install deps
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --dir cloudfunctions/api install
+
+      - name: Deploy cloud function api
+        run: npx @cloudbase/cli functions:deploy api --envId "$TCB_ENV_ID"

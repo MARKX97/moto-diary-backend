@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const { v4: uuid } = require("uuid");
+const { resolveWechatIdentity } = require("../services/wechat-auth");
 
 const signAccessToken = (payload) =>
   jwt.sign(payload, process.env.JWT_SECRET || "dev-secret", { expiresIn: "2h" });
@@ -7,10 +8,9 @@ const signRefreshToken = (payload) => uuid();
 
 const loginController = async (ctx) => {
   const { code } = ctx.data;
-  // TODO: use wx jscode2session; here仅占位
-  const wxContext = ctx.state.cloud.getWXContext();
+  const identity = await resolveWechatIdentity(code);
   const userId = uuid();
-  const accessToken = signAccessToken({ sub: userId, openid: wxContext.OPENID, role: "user" });
+  const accessToken = signAccessToken({ sub: userId, openid: identity.openid, role: "user" });
   const refreshToken = signRefreshToken({ sub: userId });
 
   return {
@@ -20,7 +20,7 @@ const loginController = async (ctx) => {
       refreshToken,
       user: {
         id: userId,
-        openid: wxContext.OPENID || "mock-openid",
+        openid: identity.openid,
         nickname: "TBD",
         avatar: "",
         role: "user",

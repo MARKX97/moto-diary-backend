@@ -7,7 +7,6 @@
     "lint": "node -c index.js"
   },
   "dependencies": {
-    "@cloudbase/logger": "^2.4.0",
     "jsonwebtoken": "^9.0.2",
     "tcb-router": "^1.1.0",
     "uuid": "^9.0.1",
