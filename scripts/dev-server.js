@@ -10,6 +10,7 @@ process.env.IS_LOCAL_DEV = "true";
 const routeMap = {
   "GET /api/v1/health": "health",
   "POST /api/v1/login": "login",
+  "POST /api/v1/token/refresh": "token.refresh",
   "GET /api/v1/items": "items.list",
 };
 

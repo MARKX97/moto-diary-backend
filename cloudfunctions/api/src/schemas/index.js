@@ -25,6 +25,15 @@ const loginSchema = (payload) => {
   };
 };
 
+const refreshTokenSchema = (payload) => {
+  if (payload.refreshToken === undefined || payload.refreshToken === null || payload.refreshToken === "") {
+    return {};
+  }
+  return {
+    refreshToken: ensureString(payload.refreshToken, "refreshToken", 8, 256),
+  };
+};
+
 const itemListSchema = (payload) => {
   const page = parseNumber(payload.page, 1);
   const pageSize = parseNumber(payload.pageSize, 10);
@@ -64,5 +73,6 @@ const itemListSchema = (payload) => {
 
 module.exports = {
   loginSchema,
+  refreshTokenSchema,
   itemListSchema,
 };

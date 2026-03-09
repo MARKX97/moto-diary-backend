@@ -9,9 +9,17 @@ const AUTH_ERROR = createAppError({
 });
 
 const authMiddleware = async (ctx, next) => {
+  const attached = attachUserFromToken(ctx);
+  if (!attached) {
+    throw AUTH_ERROR;
+  }
+  await next();
+};
+
+const attachUserFromToken = (ctx) => {
   const token = extractToken(ctx);
   if (!token) {
-    throw AUTH_ERROR;
+    return false;
   }
   try {
     const payload = verifyJwt(token, process.env.JWT_SECRET || "dev-secret");
@@ -20,10 +28,10 @@ const authMiddleware = async (ctx, next) => {
       role: payload.role || "user",
       openid: payload.openid,
     };
+    return true;
   } catch (err) {
     throw AUTH_ERROR;
   }
-  await next();
 };
 
 const extractToken = (ctx) => {
@@ -51,4 +59,4 @@ const extractToken = (ctx) => {
   return null;
 };
 
-module.exports = { authMiddleware };
+module.exports = { authMiddleware, extractToken, attachUserFromToken };

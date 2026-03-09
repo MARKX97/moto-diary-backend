@@ -10,6 +10,7 @@ const listItemsController = async (ctx) => {
         page,
         pageSize,
         sort,
+        ...(ctx.state && ctx.state.anonQuota ? { anonQuota: ctx.state.anonQuota } : {}),
       },
     },
   };

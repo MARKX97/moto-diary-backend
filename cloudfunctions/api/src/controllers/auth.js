@@ -1,33 +1,47 @@
-const { randomUUID } = require("crypto");
 const { resolveWechatIdentity } = require("../services/wechat-auth");
-const { signJwt } = require("../utils/jwt");
+const { issueLoginTokens, rotateRefreshToken } = require("../services/auth-session");
+const { ensureLoginRateLimit } = require("../services/access-control");
+const { extractToken } = require("../middlewares/auth");
+const { createAppError } = require("../utils/app-error");
 
-const signAccessToken = (payload) =>
-  signJwt(payload, process.env.JWT_SECRET || "dev-secret", 2 * 60 * 60);
-const signRefreshToken = () => randomUUID();
+const resolveRefreshToken = (ctx) => {
+  const tokenFromHeader = extractToken(ctx);
+  if (tokenFromHeader) return tokenFromHeader;
+  const tokenFromBody = ctx.data && ctx.data.refreshToken;
+  if (typeof tokenFromBody === "string" && tokenFromBody.trim()) {
+    return tokenFromBody.trim();
+  }
+  throw createAppError({
+    code: "AUTH_REQUIRED",
+    status: 401,
+    message: "Authorization required",
+    expose: true,
+  });
+};
 
 const loginController = async (ctx) => {
+  ensureLoginRateLimit(ctx);
   const { code } = ctx.data;
   const identity = await resolveWechatIdentity(code);
-  const userId = randomUUID();
-  const accessToken = signAccessToken({ sub: userId, openid: identity.openid, role: "user" });
-  const refreshToken = signRefreshToken();
+  const session = issueLoginTokens(identity);
 
   return {
     success: true,
     data: {
-      accessToken,
-      refreshToken,
-      user: {
-        id: userId,
-        openid: identity.openid,
-        nickname: "TBD",
-        avatar: "",
-        role: "user",
-        createdAt: new Date().toISOString(),
-      },
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+      user: session.user,
     },
   };
 };
 
-module.exports = { loginController };
+const refreshTokenController = async (ctx) => {
+  const refreshToken = resolveRefreshToken(ctx);
+  const nextTokens = rotateRefreshToken(refreshToken);
+  return {
+    success: true,
+    data: nextTokens,
+  };
+};
+
+module.exports = { loginController, refreshTokenController };

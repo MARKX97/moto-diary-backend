@@ -44,6 +44,11 @@ pnpm run dev:api
 可选环境变量：
 - `API_LOCAL_HOST`（默认 `127.0.0.1`）
 - `API_LOCAL_PORT`（默认 `3100`）
+- `ALLOW_LOCAL_LOGIN_FALLBACK=true`（本地联调允许 `login` 使用本地 openid 回退）
+- `LOGIN_RATE_LIMIT_PER_HOUR`（默认 `30`）
+- `ANON_FEED_QUOTA_PER_DAY`（默认 `20`）
+- `ACCESS_TOKEN_TTL_SEC`（默认 `7200`）
+- `REFRESH_TOKEN_TTL_SEC`（默认 `2592000`）
 
 2) 前端切换本地地址：
 - `UNI_APP_API_ENV=local`
@@ -52,6 +57,7 @@ pnpm run dev:api
 3) 当前已映射路由：
 - `GET /api/v1/health`
 - `POST /api/v1/login`
+- `POST /api/v1/token/refresh`
 - `GET /api/v1/items`
 
 新增云函数路由时，需要同步在 `scripts/dev-server.js` 增加映射。
@@ -86,8 +92,8 @@ wx.cloud.callFunction({
 ```
 
 当前云函数已兼容两套 `$url`：
-- 简写：`health` / `login` / `items.list`
-- HTTP 风格：`api/v1/health` / `api/v1/login` / `api/v1/items`
+- 简写：`health` / `login` / `token.refresh` / `items.list`
+- HTTP 风格：`api/v1/health` / `api/v1/login` / `api/v1/token/refresh` / `api/v1/items`
 
 ## CI/CD（GitHub Actions）
 
