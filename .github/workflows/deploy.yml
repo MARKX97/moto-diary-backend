@@ -72,4 +72,4 @@ jobs:
           pnpm --dir cloudfunctions/api install
 
       - name: Deploy cloud function api
-        run: npx @cloudbase/cli functions:deploy api --envId "$TCB_ENV_ID"
+        run: npm exec --yes --package=@cloudbase/cli@2.6.16 -- tcb fn deploy api --envId "$TCB_ENV_ID"
