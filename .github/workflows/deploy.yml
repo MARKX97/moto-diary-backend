@@ -74,5 +74,12 @@ jobs:
       - name: CloudBase login (CI)
         run: npm exec --yes --package=@cloudbase/cli@2.6.16 -- tcb login --apiKeyId "$TENCENTCLOUD_SECRETID" --apiKey "$TENCENTCLOUD_SECRETKEY"
 
+      - name: Prepare function path
+        run: |
+          if [ ! -e functions ]; then
+            ln -s cloudfunctions functions
+          fi
+          test -d functions/api
+
       - name: Deploy cloud function api
         run: npm exec --yes --package=@cloudbase/cli@2.6.16 -- tcb fn deploy api --envId "$TCB_ENV_ID"
