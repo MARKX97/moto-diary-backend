@@ -56,6 +56,39 @@ pnpm run dev:api
 
 新增云函数路由时，需要同步在 `scripts/dev-server.js` 增加映射。
 
+## 免费套餐推荐接入（wx.cloud.callFunction）
+
+如果云开发环境无法开启 HTTP 访问服务（例如 `OperationDenied.FreePackageDenied`），前端应改为直连云函数：
+
+```js
+wx.cloud.callFunction({
+  name: "api",
+  data: {
+    $url: "api/v1/login", // 也支持 login
+    code,
+  },
+});
+```
+
+受保护路由可通过 `data.headers.Authorization` 透传 JWT：
+
+```js
+wx.cloud.callFunction({
+  name: "api",
+  data: {
+    $url: "api/v1/items",
+    headers: { Authorization: `Bearer ${token}` },
+    page: 1,
+    pageSize: 10,
+    sort: "hot",
+  },
+});
+```
+
+当前云函数已兼容两套 `$url`：
+- 简写：`health` / `login` / `items.list`
+- HTTP 风格：`api/v1/health` / `api/v1/login` / `api/v1/items`
+
 ## CI/CD（GitHub Actions）
 
 已提供后端自动部署流水线：`.github/workflows/deploy.yml`

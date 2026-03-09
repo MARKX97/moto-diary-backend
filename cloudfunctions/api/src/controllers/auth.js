@@ -1,17 +1,17 @@
-const jwt = require("jsonwebtoken");
-const { v4: uuid } = require("uuid");
+const { randomUUID } = require("crypto");
 const { resolveWechatIdentity } = require("../services/wechat-auth");
+const { signJwt } = require("../utils/jwt");
 
 const signAccessToken = (payload) =>
-  jwt.sign(payload, process.env.JWT_SECRET || "dev-secret", { expiresIn: "2h" });
-const signRefreshToken = (payload) => uuid();
+  signJwt(payload, process.env.JWT_SECRET || "dev-secret", 2 * 60 * 60);
+const signRefreshToken = () => randomUUID();
 
 const loginController = async (ctx) => {
   const { code } = ctx.data;
   const identity = await resolveWechatIdentity(code);
-  const userId = uuid();
+  const userId = randomUUID();
   const accessToken = signAccessToken({ sub: userId, openid: identity.openid, role: "user" });
-  const refreshToken = signRefreshToken({ sub: userId });
+  const refreshToken = signRefreshToken();
 
   return {
     success: true,

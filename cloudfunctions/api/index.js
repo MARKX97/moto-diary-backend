@@ -1,5 +1,3 @@
-const cloud = require("wx-server-sdk");
-const TcbRouter = require("tcb-router");
 const { withErrorHandling } = require("./src/middlewares/error");
 const { attachContext } = require("./src/middlewares/context");
 const { authMiddleware } = require("./src/middlewares/auth");
@@ -8,34 +6,53 @@ const { loginSchema, itemListSchema } = require("./src/schemas");
 const { loginController } = require("./src/controllers/auth");
 const { listItemsController } = require("./src/controllers/items");
 
-cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
+const normalizeRoute = (event = {}) => {
+  const raw = String(event.$url || event.path || "").trim();
+  if (!raw) return "";
+  return raw.replace(/^\/+/, "");
+};
 
-// 云函数入口
-exports.main = async (event, context) => {
-  const app = new TcbRouter({ event });
+const routeIn = (route, aliases) => aliases.includes(route);
 
-  // 全局中间件：日志/错误处理/上下文注入
-  app.use(withErrorHandling);
-  app.use(attachContext({ cloud, context }));
-
-  // 健康检查
-  app.router("health", async (ctx) => {
+const runRoute = async (ctx, route) => {
+  if (routeIn(route, ["health", "api/v1/health"])) {
     ctx.body = { success: true, data: { now: Date.now() } };
-  });
+    return;
+  }
 
-  // 登录
-  app.router("login", async (ctx) => {
+  if (routeIn(route, ["login", "api/v1/login"])) {
     validate(ctx, loginSchema);
     ctx.body = await loginController(ctx);
+    return;
+  }
+
+  if (routeIn(route, ["items.list", "api/v1/items"])) {
+    await authMiddleware(ctx, async () => {
+      validate(ctx, itemListSchema);
+      ctx.body = await listItemsController(ctx);
+    });
+    return;
+  }
+
+  throw { code: "NOT_FOUND", status: 404, message: `No route matched for ${route || "<empty>"}` };
+};
+
+exports.main = async (event, context) => {
+  const ctx = {
+    event: event || {},
+    context: context || {},
+    state: {},
+    body: null,
+    status: 200,
+    data: null,
+  };
+
+  await withErrorHandling(ctx, async () => {
+    await attachContext({ context })(ctx, async () => {
+      const route = normalizeRoute(ctx.event);
+      await runRoute(ctx, route);
+    });
   });
 
-  // 受保护路由
-  app.use(authMiddleware);
-
-  app.router("items.list", async (ctx) => {
-    validate(ctx, itemListSchema);
-    ctx.body = await listItemsController(ctx);
-  });
-
-  return app.serve();
+  return ctx.body;
 };

@@ -6,11 +6,5 @@
   "scripts": {
     "lint": "node -c index.js"
   },
-  "dependencies": {
-    "jsonwebtoken": "^9.0.2",
-    "tcb-router": "^1.1.0",
-    "uuid": "^9.0.1",
-    "wx-server-sdk": "~2.4.0",
-    "zod": "^3.23.8"
-  }
+  "dependencies": {}
 }

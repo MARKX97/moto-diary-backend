@@ -1,4 +1,4 @@
-const jwt = require("jsonwebtoken");
+const { verifyJwt } = require("../utils/jwt");
 
 const AUTH_ERROR = { code: "AUTH_REQUIRED", status: 401, message: "Authorization required" };
 
@@ -8,7 +8,7 @@ const authMiddleware = async (ctx, next) => {
     throw AUTH_ERROR;
   }
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET || "dev-secret");
+    const payload = verifyJwt(token, process.env.JWT_SECRET || "dev-secret");
     ctx.state.user = {
       id: payload.sub,
       role: payload.role || "user",
@@ -21,10 +21,28 @@ const authMiddleware = async (ctx, next) => {
 };
 
 const extractToken = (ctx) => {
-  const headers = (ctx.event && ctx.event.headers) || {};
-  const auth = headers.Authorization || headers.authorization;
-  if (!auth || !auth.startsWith("Bearer ")) return null;
-  return auth.slice("Bearer ".length);
+  const event = ctx.event || {};
+  const headers = event.headers || event.header || {};
+
+  const candidates = [
+    headers.Authorization,
+    headers.authorization,
+    event.Authorization,
+    event.authorization,
+    event.authToken,
+    event.token,
+    event.data && event.data.Authorization,
+    event.data && event.data.authorization,
+    event.data && event.data.authToken,
+    event.data && event.data.token,
+  ].filter(Boolean);
+
+  for (const raw of candidates) {
+    if (typeof raw !== "string") continue;
+    if (raw.startsWith("Bearer ")) return raw.slice("Bearer ".length);
+  }
+
+  return null;
 };
 
 module.exports = { authMiddleware };
