@@ -1,6 +1,12 @@
 const { verifyJwt } = require("../utils/jwt");
+const { createAppError } = require("../utils/app-error");
 
-const AUTH_ERROR = { code: "AUTH_REQUIRED", status: 401, message: "Authorization required" };
+const AUTH_ERROR = createAppError({
+  code: "AUTH_REQUIRED",
+  status: 401,
+  message: "Authorization required",
+  expose: true,
+});
 
 const authMiddleware = async (ctx, next) => {
   const token = extractToken(ctx);

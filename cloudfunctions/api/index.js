@@ -5,6 +5,7 @@ const { validate } = require("./src/middlewares/validate");
 const { loginSchema, itemListSchema } = require("./src/schemas");
 const { loginController } = require("./src/controllers/auth");
 const { listItemsController } = require("./src/controllers/items");
+const { createAppError } = require("./src/utils/app-error");
 
 const normalizeRoute = (event = {}) => {
   const raw = String(event.$url || event.path || "").trim();
@@ -34,7 +35,12 @@ const runRoute = async (ctx, route) => {
     return;
   }
 
-  throw { code: "NOT_FOUND", status: 404, message: `No route matched for ${route || "<empty>"}` };
+  throw createAppError({
+    code: "NOT_FOUND",
+    status: 404,
+    message: `No route matched for ${route || "<empty>"}`,
+    expose: true,
+  });
 };
 
 exports.main = async (event, context) => {

@@ -1,3 +1,5 @@
+const { createAppError } = require("./app-error");
+
 const RESERVED_EVENT_KEYS = new Set([
   "$url",
   "path",
@@ -34,7 +36,12 @@ const parsePayload = (event = {}) => {
       const body = typeof event.body === "string" ? JSON.parse(event.body) : event.body;
       Object.assign(data, body);
     } catch (err) {
-      throw { code: "VALIDATION_FAILED", message: "Invalid JSON body", status: 400 };
+      throw createAppError({
+        code: "VALIDATION_FAILED",
+        message: "Invalid JSON body",
+        status: 400,
+        expose: true,
+      });
     }
   }
   // tcb-router 自定义参数 data

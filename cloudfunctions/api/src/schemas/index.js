@@ -1,4 +1,7 @@
-const makeValidationError = (message) => ({ code: "VALIDATION_FAILED", status: 400, message });
+const { createAppError } = require("../utils/app-error");
+
+const makeValidationError = (message) =>
+  createAppError({ code: "VALIDATION_FAILED", status: 400, message, expose: true });
 
 const ensureString = (value, field, min, max) => {
   if (typeof value !== "string") {

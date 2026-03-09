@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const https = require("https");
+const { createAppError } = require("../utils/app-error");
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.WECHAT_API_TIMEOUT_MS || 2500);
 
@@ -22,7 +23,14 @@ const requestJson = (url, timeoutMs) =>
         try {
           resolve(JSON.parse(raw || "{}"));
         } catch (_err) {
-          reject({ code: "DEPENDENCY_ERROR", status: 502, message: "Invalid jscode2session response" });
+          reject(
+            createAppError({
+              code: "DEPENDENCY_ERROR",
+              status: 502,
+              message: "Invalid jscode2session response",
+              expose: true,
+            })
+          );
         }
       });
     });
@@ -31,7 +39,14 @@ const requestJson = (url, timeoutMs) =>
       req.destroy(new Error("jscode2session timeout"));
     });
     req.on("error", (err) => {
-      reject({ code: "DEPENDENCY_ERROR", status: 502, message: err.message || "jscode2session failed" });
+      reject(
+        createAppError({
+          code: "DEPENDENCY_ERROR",
+          status: 502,
+          message: err.message || "jscode2session failed",
+          expose: true,
+        })
+      );
     });
   });
 
@@ -40,7 +55,12 @@ const callJsCode2Session = async (code) => {
   const secret = process.env.WECHAT_SECRET;
 
   if (!appid || !secret) {
-    throw { code: "INTERNAL_ERROR", status: 500, message: "Missing WECHAT_APPID or WECHAT_SECRET" };
+    throw createAppError({
+      code: "INTERNAL_ERROR",
+      status: 500,
+      message: "Missing WECHAT_APPID or WECHAT_SECRET",
+      expose: false,
+    });
   }
 
   const endpoint =
@@ -49,14 +69,20 @@ const callJsCode2Session = async (code) => {
 
   const data = await requestJson(endpoint, DEFAULT_TIMEOUT_MS);
   if (data.errcode) {
-    throw {
+    throw createAppError({
       code: "DEPENDENCY_ERROR",
       status: 502,
       message: `jscode2session failed: ${data.errmsg || "unknown"} (${data.errcode})`,
-    };
+      expose: true,
+    });
   }
   if (!data.openid) {
-    throw { code: "DEPENDENCY_ERROR", status: 502, message: "jscode2session returned empty openid" };
+    throw createAppError({
+      code: "DEPENDENCY_ERROR",
+      status: 502,
+      message: "jscode2session returned empty openid",
+      expose: true,
+    });
   }
   return data;
 };
