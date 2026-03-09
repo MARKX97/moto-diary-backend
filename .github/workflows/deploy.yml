@@ -71,5 +71,8 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm --dir cloudfunctions/api install
 
+      - name: CloudBase login (CI)
+        run: npm exec --yes --package=@cloudbase/cli@2.6.16 -- tcb login --apiKeyId "$TENCENTCLOUD_SECRETID" --apiKey "$TENCENTCLOUD_SECRETKEY"
+
       - name: Deploy cloud function api
         run: npm exec --yes --package=@cloudbase/cli@2.6.16 -- tcb fn deploy api --envId "$TCB_ENV_ID"
