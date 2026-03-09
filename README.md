@@ -128,6 +128,31 @@ wx.cloud.callFunction({
 
 本地 `pnpm run dev:api` 联调默认不触发上报，用于避免 dev 噪声数据进入 Sentry。
 
+业务代码可直接复用封装：
+
+```js
+const { captureException, captureMessage, setUser, setTag, setContext } = require("./src/utils/sentry");
+
+let scope = {};
+scope = setTag(scope, "module", "items");
+scope = setTag(scope, "action", "create");
+scope = setUser(scope, { id: ctx.state.user && ctx.state.user.id });
+scope = setContext(scope, "request", { requestId: ctx.state.requestId });
+
+try {
+  // business logic
+} catch (err) {
+  await captureException(err, scope);
+  throw err;
+}
+
+await captureMessage("items list fallback", {
+  level: "warning",
+  tags: { module: "items" },
+  extras: { reason: "cache_miss" },
+});
+```
+
 ## 车型目录导入（upsert）
 
 推荐输入文件：`../crawler_output/vehicle_catalog_flat.json`
