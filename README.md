@@ -94,12 +94,12 @@ wx.cloud.callFunction({
 已提供后端自动部署流水线：`.github/workflows/deploy.yml`
 
 - 触发分支：
-  - `dev` -> 仅执行校验（不部署）
   - `main` -> 校验通过后部署到单一云开发环境
+  - `workflow_dispatch` -> 可手动触发（仅在 `main` 分支会执行部署）
 - 部署内容：`cloudfunctions/api`
 - 主流程：
   - `verify`：安装依赖 + 语法检查
-  - `deploy-main`：仅 `main` 执行 `@cloudbase/cli` 部署
+  - `deploy-main`：执行 `@cloudbase/cli` 部署
 
 必需 Secrets（单环境）：
 - `TCB_ENV_ID`
@@ -107,7 +107,7 @@ wx.cloud.callFunction({
 - `TCB_SECRET_KEY`
 
 说明：
-- 单环境下必须保证 `dev` 不自动部署，否则会覆盖线上函数。
+- 当前策略为“仅 main 自动部署”，避免非发布分支触发线上覆盖。
 - 若 secrets 未配置，`main` 部署阶段会直接失败并阻断发布。
 
 ## 车型目录导入（upsert）

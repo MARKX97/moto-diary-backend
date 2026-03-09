@@ -2,7 +2,7 @@ name: backend-deploy
 
 on:
   push:
-    branches: [dev, main]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -36,7 +36,7 @@ jobs:
           node -c cloudfunctions/api/index.js
 
   deploy-main:
-    if: github.ref_name == 'main'
+    if: github.ref == 'refs/heads/main'
     needs: verify
     runs-on: ubuntu-latest
     env:
