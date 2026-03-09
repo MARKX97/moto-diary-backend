@@ -110,6 +110,24 @@ wx.cloud.callFunction({
 - 当前策略为“仅 main 自动部署”，避免非发布分支触发线上覆盖。
 - 若 secrets 未配置，`main` 部署阶段会直接失败并阻断发布。
 
+## Sentry 错误上报（仅线上）
+
+后端已接入 `@sentry/node`，在统一错误处理中自动上报异常。
+
+启用条件（同时满足才会上报）：
+- `SENTRY_ENABLED=true`
+- `SENTRY_DSN` 已配置
+- 非本地联调（`IS_LOCAL_DEV=true` 时强制不上报）
+
+推荐在云函数 `api` 的运行时环境变量中配置：
+- `SENTRY_ENABLED=true`
+- `SENTRY_DSN=<your sentry dsn>`
+- `APP_ENV=main`
+- `SENTRY_RELEASE`（可选，建议填版本号或 commit）
+- `SENTRY_TRACES_SAMPLE_RATE`（可选，默认 `0`）
+
+本地 `pnpm run dev:api` 联调默认不触发上报，用于避免 dev 噪声数据进入 Sentry。
+
 ## 车型目录导入（upsert）
 
 推荐输入文件：`../crawler_output/vehicle_catalog_flat.json`

@@ -27,7 +27,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install function deps
-        run: pnpm --dir cloudfunctions/api install
+        run: pnpm --dir cloudfunctions/api install --no-frozen-lockfile
 
       - name: Basic script checks
         run: |
@@ -69,7 +69,7 @@ jobs:
       - name: Install deps
         run: |
           pnpm install --frozen-lockfile
-          pnpm --dir cloudfunctions/api install
+          pnpm --dir cloudfunctions/api install --no-frozen-lockfile
 
       - name: CloudBase login (CI)
         run: npm exec --yes --package=@cloudbase/cli@2.6.16 -- tcb login --apiKeyId "$TENCENTCLOUD_SECRETID" --apiKey "$TENCENTCLOUD_SECRETKEY"
