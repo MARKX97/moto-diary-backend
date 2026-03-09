@@ -82,4 +82,4 @@ jobs:
           test -d functions/api
 
       - name: Deploy cloud function api
-        run: printf "y\n" | npm exec --yes --package=@cloudbase/cli@2.6.16 -- tcb fn deploy api --envId "$TCB_ENV_ID"
+        run: npm exec --yes --package=@cloudbase/cli@2.6.16 -- tcb fn code update api --envId "$TCB_ENV_ID"
