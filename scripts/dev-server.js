@@ -12,6 +12,37 @@ const routeMap = {
   "POST /api/v1/login": "login",
   "POST /api/v1/token/refresh": "token.refresh",
   "GET /api/v1/items": "items.list",
+  "POST /api/v1/items": "items.create",
+};
+
+const dynamicRouteMatchers = [
+  {
+    method: "GET",
+    pattern: /^\/api\/v1\/items\/([^/]+)$/,
+    build: (match) => ({
+      route: "items.detail",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+  {
+    method: "PUT",
+    pattern: /^\/api\/v1\/items\/([^/]+)$/,
+    build: (match) => ({
+      route: "items.update",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+];
+
+const resolveRoute = (method, pathname) => {
+  const staticRoute = routeMap[`${method} ${pathname}`];
+  if (staticRoute) {
+    return { route: staticRoute, payload: {} };
+  }
+  const matcher = dynamicRouteMatchers.find((item) => item.method === method && item.pattern.test(pathname));
+  if (!matcher) return null;
+  const matched = pathname.match(matcher.pattern);
+  return matcher.build(matched);
 };
 
 let apiMain;
@@ -50,24 +81,24 @@ const server = http.createServer(async (req, res) => {
   }
 
   const url = new URL(req.url || "/", `http://${req.headers.host || `${HOST}:${PORT}`}`);
-  const routeKey = `${req.method} ${url.pathname}`;
-  const mapped = routeMap[routeKey];
-  if (!mapped) {
+  const resolved = resolveRoute(req.method, url.pathname);
+  if (!resolved) {
     return sendJson(res, 404, {
       success: false,
-      error: { code: "NOT_FOUND", message: `No local route mapped for ${routeKey}` },
+      error: { code: "NOT_FOUND", message: `No local route mapped for ${req.method} ${url.pathname}` },
     });
   }
 
   try {
     const rawBody = await readBody(req);
     const event = {
-      $url: mapped,
+      $url: resolved.route,
       path: url.pathname,
       httpMethod: req.method,
       headers: req.headers || {},
       queryStringParameters: Object.fromEntries(url.searchParams.entries()),
       body: rawBody || undefined,
+      ...resolved.payload,
     };
     const context = {
       requestId: randomUUID(),
@@ -100,4 +131,5 @@ server.listen(PORT, HOST, () => {
   console.log(`Local API server running at http://${HOST}:${PORT}`);
   console.log("Mapped routes:");
   Object.entries(routeMap).forEach(([k, v]) => console.log(`  ${k} -> ${v}`));
+  dynamicRouteMatchers.forEach((item) => console.log(`  ${item.method} ${item.pattern} -> dynamic`));
 });
