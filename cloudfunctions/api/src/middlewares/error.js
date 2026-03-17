@@ -1,6 +1,7 @@
 const { logger } = require("../utils/logger");
 const { captureException, isSentryEnabled } = require("../utils/sentry");
 const { toAppError } = require("../utils/app-error");
+const { classifyError } = require("../utils/error-classification");
 
 const buildClientError = (error, requestId) => {
   const payload = {
@@ -34,18 +35,33 @@ const withErrorHandling = async (ctx, next) => {
     const route = ctx && ctx.state ? ctx.state.route : undefined;
     const method = ctx && ctx.state ? ctx.state.method : undefined;
     const userId = ctx && ctx.state && ctx.state.user ? ctx.state.user.id : undefined;
+    const meta = classifyError(appError);
 
+    let sentryEventId;
     if (isSentryEnabled()) {
-      await captureException(appError, {
+      sentryEventId = await captureException(appError, {
+        level: meta.severity,
+        fingerprint: [
+          "api-error",
+          meta.code,
+          route || "unknown_route",
+          method || "unknown_method",
+        ],
         tags: {
-          code: appError.code,
+          code: meta.code,
+          category: meta.category,
+          status_family: meta.statusFamily,
           method,
+          route: route || "unknown",
         },
         extras: {
           requestId,
           route,
           userId,
-          status: appError.status,
+          status: meta.status,
+          errorMessage: appError.message,
+          expose: appError.expose,
+          details: appError.details,
         },
       });
     }
@@ -54,8 +70,12 @@ const withErrorHandling = async (ctx, next) => {
       route,
       method,
       userId,
-      code: appError.code,
-      status: appError.status,
+      code: meta.code,
+      status: meta.status,
+      category: meta.category,
+      statusFamily: meta.statusFamily,
+      severity: meta.severity,
+      sentryEventId,
     });
     ctx.body = {
       success: false,
