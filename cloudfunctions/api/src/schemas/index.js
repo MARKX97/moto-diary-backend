@@ -270,6 +270,23 @@ const vehicleCatalogListSchema = (payload) => {
   };
 };
 
+const vehicleCatalogBrandsSchema = (payload) => {
+  const keyword = payload.keyword === undefined ? undefined : ensureString(payload.keyword, "keyword", 1, 32);
+  const page = parseNumber(payload.page, 1);
+  const pageSize = parseNumber(payload.pageSize, 50);
+  if (!Number.isInteger(page) || page < 1) {
+    throw makeValidationError("page must be >= 1");
+  }
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 200) {
+    throw makeValidationError("pageSize must be between 1 and 200");
+  }
+  return {
+    ...(keyword !== undefined ? { keyword } : {}),
+    page,
+    pageSize,
+  };
+};
+
 const vehiclesListSchema = (payload) => {
   const page = parseNumber(payload.page, 1);
   const pageSize = parseNumber(payload.pageSize, 10);
@@ -438,6 +455,7 @@ module.exports = {
   itemCreateSchema,
   itemUpdateSchema,
   vehicleCatalogListSchema,
+  vehicleCatalogBrandsSchema,
   vehiclesListSchema,
   vehicleCreateSchema,
   vehicleIdSchema,

@@ -10,6 +10,7 @@ const {
   itemCreateSchema,
   itemUpdateSchema,
   vehicleCatalogListSchema,
+  vehicleCatalogBrandsSchema,
   vehiclesListSchema,
   vehicleCreateSchema,
   vehicleIdSchema,
@@ -26,7 +27,10 @@ const {
   createItemController,
   updateItemController,
 } = require("./src/controllers/items");
-const { listVehicleCatalogController } = require("./src/controllers/vehicle-catalog");
+const {
+  listVehicleCatalogController,
+  listVehicleCatalogBrandsController,
+} = require("./src/controllers/vehicle-catalog");
 const {
   listVehiclesController,
   createVehicleController,
@@ -143,6 +147,12 @@ const staticRouteTable = [
     auth: "required",
     schema: itemCreateSchema,
     controller: createItemController,
+  },
+  {
+    aliases: ["vehicle.catalog.brands", "api/v1/vehicle-catalog/brands"],
+    method: "GET",
+    schema: vehicleCatalogBrandsSchema,
+    controller: listVehicleCatalogBrandsController,
   },
   {
     aliases: ["vehicle.catalog", "api/v1/vehicle-catalog"],

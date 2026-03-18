@@ -96,6 +96,11 @@ wx.cloud.callFunction({
 - 简写：`health` / `login` / `token.refresh` / `items.list`
 - HTTP 风格：`api/v1/health` / `api/v1/login` / `api/v1/token/refresh` / `api/v1/items`
 
+车型品牌总表接口（前端“先选品牌”）：
+- `GET /api/v1/vehicle-catalog/brands`
+- query: `keyword?`, `page`(默认 1), `pageSize`(默认 50, 最大 200)
+- response: `list: [{ brand, topHotRank, modelCount }]`
+
 ## CI/CD（GitHub Actions）
 
 已提供后端自动部署流水线：`.github/workflows/deploy.yml`

@@ -14,6 +14,7 @@ const routeMap = {
   "POST /api/v1/logout": "logout",
   "GET /api/v1/items": "items.list",
   "POST /api/v1/items": "items.create",
+  "GET /api/v1/vehicle-catalog/brands": "vehicle.catalog.brands",
   "GET /api/v1/vehicle-catalog": "vehicle.catalog",
   "GET /api/v1/vehicles": "vehicles.list",
   "POST /api/v1/vehicles": "vehicles.create",
