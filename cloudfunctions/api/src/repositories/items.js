@@ -1,4 +1,4 @@
-const { getDb } = require("../utils/db");
+const { getDb, addDoc, updateDoc } = require("../utils/db");
 
 const ITEMS_COLLECTION = "items";
 
@@ -66,14 +66,14 @@ const getItemById = async (id) => {
 };
 
 const createItem = async (doc) => {
-  const res = await getItemsCollection().add(doc);
+  const res = await addDoc(getItemsCollection(), doc);
   const id = res && (res.id || res._id) ? res.id || res._id : null;
   if (!id) return null;
   return getItemById(id);
 };
 
 const updateItemById = async (id, updates) => {
-  await getItemsCollection().doc(id).update(updates);
+  await updateDoc(getItemsCollection().doc(id), updates);
   return getItemById(id);
 };
 

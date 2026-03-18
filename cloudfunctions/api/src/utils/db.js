@@ -1,10 +1,12 @@
 let cachedDb = null;
+let cachedMode = null;
 
 const initWxServerSdkDb = () => {
   // Prefer cloud function native SDK in Tencent Cloud runtime.
   // eslint-disable-next-line global-require
   const cloud = require("wx-server-sdk");
   cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
+  cachedMode = "wx";
   return cloud.database();
 };
 
@@ -17,6 +19,7 @@ const initCloudbaseNodeSdkDb = () => {
     secretId: process.env.TCB_SECRET_ID,
     secretKey: process.env.TCB_SECRET_KEY,
   });
+  cachedMode = "node";
   return app.database();
 };
 
@@ -32,6 +35,42 @@ const getDb = () => {
   }
 };
 
+const getDbMode = () => {
+  if (!cachedDb) {
+    getDb();
+  }
+  return cachedMode || "node";
+};
+
+const addDoc = async (collection, doc) => {
+  if (getDbMode() === "wx") {
+    return collection.add({ data: doc });
+  }
+  return collection.add(doc);
+};
+
+const updateDoc = async (docRef, updates) => {
+  if (getDbMode() === "wx") {
+    return docRef.update({ data: updates });
+  }
+  return docRef.update(updates);
+};
+
+const buildPrefixRegExp = (value, options = "i") => {
+  const db = getDb();
+  if (db && typeof db.RegExp === "function") {
+    return db.RegExp({
+      regexp: `^${String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+      options,
+    });
+  }
+  return undefined;
+};
+
 module.exports = {
   getDb,
+  getDbMode,
+  addDoc,
+  updateDoc,
+  buildPrefixRegExp,
 };

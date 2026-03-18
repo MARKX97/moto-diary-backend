@@ -1,5 +1,10 @@
 const { resolveWechatIdentity } = require("../services/wechat-auth");
-const { issueLoginTokens, rotateRefreshToken } = require("../services/auth-session");
+const {
+  issueLoginTokens,
+  rotateRefreshToken,
+  revokeAccessToken,
+  revokeRefreshSessionsByUserId,
+} = require("../services/auth-session");
 const { ensureLoginRateLimit } = require("../services/access-control");
 const { extractToken } = require("../middlewares/auth");
 const { createAppError } = require("../utils/app-error");
@@ -44,4 +49,17 @@ const refreshTokenController = async (ctx) => {
   };
 };
 
-module.exports = { loginController, refreshTokenController };
+const logoutController = async (ctx) => {
+  const user = ctx.state && ctx.state.user;
+  const auth = ctx.state && ctx.state.auth;
+  revokeAccessToken(auth && auth.payload);
+  revokeRefreshSessionsByUserId(user && user.id);
+  return {
+    success: true,
+    data: {
+      loggedOut: true,
+    },
+  };
+};
+
+module.exports = { loginController, refreshTokenController, logoutController };

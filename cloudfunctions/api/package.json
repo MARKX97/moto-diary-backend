@@ -7,6 +7,8 @@
     "lint": "node -c index.js"
   },
   "dependencies": {
-    "@sentry/node": "^8.0.0"
+    "@cloudbase/node-sdk": "^3.18.0",
+    "@sentry/node": "^8.0.0",
+    "wx-server-sdk": "^3.0.4"
   }
 }

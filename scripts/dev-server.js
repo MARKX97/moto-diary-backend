@@ -11,8 +11,14 @@ const routeMap = {
   "GET /api/v1/health": "health",
   "POST /api/v1/login": "login",
   "POST /api/v1/token/refresh": "token.refresh",
+  "POST /api/v1/logout": "logout",
   "GET /api/v1/items": "items.list",
   "POST /api/v1/items": "items.create",
+  "GET /api/v1/vehicle-catalog": "vehicle.catalog",
+  "GET /api/v1/vehicles": "vehicles.list",
+  "POST /api/v1/vehicles": "vehicles.create",
+  "GET /api/v1/fuel-records": "fuel-records.list",
+  "POST /api/v1/fuel-records": "fuel-records.create",
 };
 
 const dynamicRouteMatchers = [
@@ -29,6 +35,38 @@ const dynamicRouteMatchers = [
     pattern: /^\/api\/v1\/items\/([^/]+)$/,
     build: (match) => ({
       route: "items.update",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+  {
+    method: "PUT",
+    pattern: /^\/api\/v1\/vehicles\/([^/]+)$/,
+    build: (match) => ({
+      route: "vehicles.update",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+  {
+    method: "DELETE",
+    pattern: /^\/api\/v1\/vehicles\/([^/]+)$/,
+    build: (match) => ({
+      route: "vehicles.delete",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+  {
+    method: "PATCH",
+    pattern: /^\/api\/v1\/fuel-records\/([^/]+)$/,
+    build: (match) => ({
+      route: "fuel-records.update",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+  {
+    method: "DELETE",
+    pattern: /^\/api\/v1\/fuel-records\/([^/]+)$/,
+    build: (match) => ({
+      route: "fuel-records.delete",
       payload: { id: decodeURIComponent(match[1]) },
     }),
   },

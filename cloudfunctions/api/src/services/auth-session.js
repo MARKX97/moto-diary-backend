@@ -4,6 +4,7 @@ const { signJwt } = require("../utils/jwt");
 const { createAppError } = require("../utils/app-error");
 
 const refreshSessions = new Map();
+const revokedAccessTokens = new Map();
 
 const nowMs = () => Date.now();
 
@@ -34,7 +35,27 @@ const cleanupExpired = () => {
   }
 };
 
-const buildAccessToken = (claims) => signJwt(claims, jwtSecret(), accessTokenTtlSec());
+const cleanupRevokedAccessTokens = () => {
+  const now = nowMs();
+  for (const [jti, expiresAt] of revokedAccessTokens.entries()) {
+    if (!expiresAt || expiresAt <= now) {
+      revokedAccessTokens.delete(jti);
+    }
+  }
+};
+
+const buildAccessClaims = (claims) => ({
+  ...claims,
+  jti: randomUUID(),
+});
+
+const buildAccessToken = (claims) => {
+  const accessClaims = buildAccessClaims(claims);
+  return {
+    accessToken: signJwt(accessClaims, jwtSecret(), accessTokenTtlSec()),
+    accessClaims,
+  };
+};
 
 const buildSessionFromIdentity = (identity) => {
   const openid = String(identity && identity.openid ? identity.openid : "");
@@ -47,13 +68,15 @@ const buildSessionFromIdentity = (identity) => {
 
 const issueLoginTokens = (identity) => {
   cleanupExpired();
+  cleanupRevokedAccessTokens();
   const claims = buildSessionFromIdentity(identity);
   const refreshToken = randomUUID();
   const expiresAt = nowMs() + refreshTokenTtlSec() * 1000;
   refreshSessions.set(hashToken(refreshToken), { claims, expiresAt });
+  const { accessToken } = buildAccessToken(claims);
 
   return {
-    accessToken: buildAccessToken(claims),
+    accessToken,
     refreshToken,
     user: {
       id: claims.sub,
@@ -68,6 +91,7 @@ const issueLoginTokens = (identity) => {
 
 const rotateRefreshToken = (refreshToken) => {
   cleanupExpired();
+  cleanupRevokedAccessTokens();
   const key = hashToken(refreshToken);
   const existing = refreshSessions.get(key);
   if (!existing) {
@@ -93,13 +117,48 @@ const rotateRefreshToken = (refreshToken) => {
   refreshSessions.delete(key);
   refreshSessions.set(hashToken(nextRefreshToken), { claims: existing.claims, expiresAt: nextExpiresAt });
 
+  const { accessToken } = buildAccessToken(existing.claims);
   return {
-    accessToken: buildAccessToken(existing.claims),
+    accessToken,
     refreshToken: nextRefreshToken,
   };
+};
+
+const revokeAccessToken = (payload) => {
+  cleanupRevokedAccessTokens();
+  const jti = payload && payload.jti;
+  const exp = payload && payload.exp;
+  if (!jti || !Number.isFinite(exp)) return;
+  revokedAccessTokens.set(String(jti), Number(exp) * 1000);
+};
+
+const isAccessTokenRevoked = (payload) => {
+  cleanupRevokedAccessTokens();
+  const jti = payload && payload.jti;
+  if (!jti) return false;
+  const expiresAt = revokedAccessTokens.get(String(jti));
+  if (!expiresAt) return false;
+  if (expiresAt <= nowMs()) {
+    revokedAccessTokens.delete(String(jti));
+    return false;
+  }
+  return true;
+};
+
+const revokeRefreshSessionsByUserId = (userId) => {
+  if (!userId) return;
+  cleanupExpired();
+  for (const [key, value] of refreshSessions.entries()) {
+    if (value && value.claims && value.claims.sub === userId) {
+      refreshSessions.delete(key);
+    }
+  }
 };
 
 module.exports = {
   issueLoginTokens,
   rotateRefreshToken,
+  revokeAccessToken,
+  isAccessTokenRevoked,
+  revokeRefreshSessionsByUserId,
 };

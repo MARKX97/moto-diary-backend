@@ -58,6 +58,7 @@ pnpm run dev:api
 - `GET /api/v1/health`
 - `POST /api/v1/login`
 - `POST /api/v1/token/refresh`
+- `POST /api/v1/logout`
 - `GET /api/v1/items`
 
 新增云函数路由时，需要同步在 `scripts/dev-server.js` 增加映射。

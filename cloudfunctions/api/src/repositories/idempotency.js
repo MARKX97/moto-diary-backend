@@ -1,4 +1,4 @@
-const { getDb } = require("../utils/db");
+const { getDb, addDoc, updateDoc } = require("../utils/db");
 
 const IDEMPOTENCY_COLLECTION = "idempotency_keys";
 
@@ -11,13 +11,13 @@ const findIdempotencyRecord = async ({ key, path, userId }) => {
 };
 
 const createIdempotencyRecord = async (doc) => {
-  const res = await getCollection().add(doc);
+  const res = await addDoc(getCollection(), doc);
   return res && (res.id || res._id) ? res.id || res._id : null;
 };
 
 const updateIdempotencyRecord = async (id, payload) => {
   if (!id) return;
-  await getCollection().doc(id).update(payload);
+  await updateDoc(getCollection().doc(id), payload);
 };
 
 module.exports = {

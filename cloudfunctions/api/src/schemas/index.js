@@ -226,9 +226,6 @@ const itemUpdateSchema = (payload) => {
   const groupId =
     payload.groupId === undefined ? undefined : ensureOptionalString(payload.groupId, "groupId", 1, 128);
 
-  if (type === "route" && route === undefined) {
-    throw makeValidationError("route is required when type=route");
-  }
   if (visibility === "group" && !groupId) {
     throw makeValidationError("groupId is required when visibility=group");
   }
@@ -249,6 +246,190 @@ const itemUpdateSchema = (payload) => {
   };
 };
 
+const vehicleCatalogListSchema = (payload) => {
+  const brand = payload.brand === undefined ? undefined : ensureString(payload.brand, "brand", 1, 64);
+  const keyword = payload.keyword === undefined ? undefined : ensureString(payload.keyword, "keyword", 1, 32);
+  const page = parseNumber(payload.page, 1);
+  const pageSize = parseNumber(payload.pageSize, 20);
+
+  if (!Number.isInteger(page) || page < 1) {
+    throw makeValidationError("page must be >= 1");
+  }
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50) {
+    throw makeValidationError("pageSize must be between 1 and 50");
+  }
+  if (keyword && !brand && pageSize > 20) {
+    throw makeValidationError("pageSize must be <= 20 when keyword search without brand");
+  }
+
+  return {
+    ...(brand !== undefined ? { brand } : {}),
+    ...(keyword !== undefined ? { keyword } : {}),
+    page,
+    pageSize,
+  };
+};
+
+const vehiclesListSchema = (payload) => {
+  const page = parseNumber(payload.page, 1);
+  const pageSize = parseNumber(payload.pageSize, 10);
+  if (!Number.isInteger(page) || page < 1) {
+    throw makeValidationError("page must be >= 1");
+  }
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50) {
+    throw makeValidationError("pageSize must be between 1 and 50");
+  }
+  return { page, pageSize };
+};
+
+const parseTankCapacity = (value, field) => {
+  if (value === undefined) return undefined;
+  const num = parseNumber(value, NaN);
+  if (!Number.isFinite(num) || num <= 0 || num > 200) {
+    throw makeValidationError(`${field} must be between 0 and 200`);
+  }
+  return Number(num.toFixed(2));
+};
+
+const vehicleCreateSchema = (payload) => {
+  const brand = ensureString(payload.brand, "brand", 1, 64);
+  const model = ensureString(payload.model, "model", 1, 64);
+  const tankCapacityL = parseTankCapacity(payload.tankCapacityL, "tankCapacityL");
+  return {
+    brand,
+    model,
+    ...(tankCapacityL !== undefined ? { tankCapacityL } : {}),
+  };
+};
+
+const vehicleIdSchema = (payload) => ({
+  id: ensureString(payload.id, "id", 1, 128),
+});
+
+const vehicleUpdateSchema = (payload) => {
+  const id = ensureString(payload.id, "id", 1, 128);
+  const hasAnyField = ["brand", "model", "tankCapacityL"].some((key) =>
+    Object.prototype.hasOwnProperty.call(payload, key)
+  );
+  if (!hasAnyField) {
+    throw makeValidationError("at least one updatable field is required");
+  }
+
+  const brand =
+    payload.brand === undefined ? undefined : ensureString(payload.brand, "brand", 1, 64);
+  const model =
+    payload.model === undefined ? undefined : ensureString(payload.model, "model", 1, 64);
+  const tankCapacityL = parseTankCapacity(payload.tankCapacityL, "tankCapacityL");
+
+  return {
+    id,
+    ...(brand !== undefined ? { brand } : {}),
+    ...(model !== undefined ? { model } : {}),
+    ...(tankCapacityL !== undefined ? { tankCapacityL } : {}),
+  };
+};
+
+const parseBool = (value, field) => {
+  if (typeof value === "boolean") return value;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw makeValidationError(`${field} must be a boolean`);
+};
+
+const fuelRecordsListSchema = (payload) => {
+  const vehicleId =
+    payload.vehicleId === undefined ? undefined : ensureString(payload.vehicleId, "vehicleId", 1, 128);
+  const page = parseNumber(payload.page, 1);
+  const pageSize = parseNumber(payload.pageSize, 10);
+
+  if (!Number.isInteger(page) || page < 1) {
+    throw makeValidationError("page must be >= 1");
+  }
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50) {
+    throw makeValidationError("pageSize must be between 1 and 50");
+  }
+
+  return {
+    ...(vehicleId ? { vehicleId } : {}),
+    page,
+    pageSize,
+  };
+};
+
+const parsePositiveNumber = (value, field, max = Number.MAX_SAFE_INTEGER) => {
+  const num = parseNumber(value, NaN);
+  if (!Number.isFinite(num) || num <= 0 || num > max) {
+    throw makeValidationError(`${field} must be > 0`);
+  }
+  return num;
+};
+
+const fuelRecordCreateSchema = (payload) => {
+  const vehicleId = ensureString(payload.vehicleId, "vehicleId", 1, 128);
+  const pricePerL = Number(parsePositiveNumber(payload.pricePerL, "pricePerL", 100000).toFixed(2));
+  const amountPaid = Number(parsePositiveNumber(payload.amountPaid, "amountPaid", 1000000).toFixed(2));
+  const odometerKm = Number(parsePositiveNumber(payload.odometerKm, "odometerKm", 10000000).toFixed(2));
+  const isFull = parseBool(payload.isFull, "isFull");
+  const lastOdometerKm =
+    payload.lastOdometerKm === undefined
+      ? undefined
+      : Number(parsePositiveNumber(payload.lastOdometerKm, "lastOdometerKm", 10000000).toFixed(2));
+  const note = payload.note === undefined ? undefined : ensureString(payload.note, "note", 1, 140);
+
+  return {
+    vehicleId,
+    pricePerL,
+    amountPaid,
+    odometerKm,
+    isFull,
+    ...(lastOdometerKm !== undefined ? { lastOdometerKm } : {}),
+    ...(note !== undefined ? { note } : {}),
+  };
+};
+
+const fuelRecordIdSchema = (payload) => ({
+  id: ensureString(payload.id, "id", 1, 128),
+});
+
+const fuelRecordUpdateSchema = (payload) => {
+  const id = ensureString(payload.id, "id", 1, 128);
+  const hasAnyField = ["pricePerL", "amountPaid", "odometerKm", "isFull", "lastOdometerKm", "note"].some((key) =>
+    Object.prototype.hasOwnProperty.call(payload, key)
+  );
+  if (!hasAnyField) {
+    throw makeValidationError("at least one updatable field is required");
+  }
+
+  const pricePerL =
+    payload.pricePerL === undefined
+      ? undefined
+      : Number(parsePositiveNumber(payload.pricePerL, "pricePerL", 100000).toFixed(2));
+  const amountPaid =
+    payload.amountPaid === undefined
+      ? undefined
+      : Number(parsePositiveNumber(payload.amountPaid, "amountPaid", 1000000).toFixed(2));
+  const odometerKm =
+    payload.odometerKm === undefined
+      ? undefined
+      : Number(parsePositiveNumber(payload.odometerKm, "odometerKm", 10000000).toFixed(2));
+  const isFull = payload.isFull === undefined ? undefined : parseBool(payload.isFull, "isFull");
+  const lastOdometerKm =
+    payload.lastOdometerKm === undefined
+      ? undefined
+      : Number(parsePositiveNumber(payload.lastOdometerKm, "lastOdometerKm", 10000000).toFixed(2));
+  const note = payload.note === undefined ? undefined : ensureString(payload.note, "note", 1, 140);
+
+  return {
+    id,
+    ...(pricePerL !== undefined ? { pricePerL } : {}),
+    ...(amountPaid !== undefined ? { amountPaid } : {}),
+    ...(odometerKm !== undefined ? { odometerKm } : {}),
+    ...(isFull !== undefined ? { isFull } : {}),
+    ...(lastOdometerKm !== undefined ? { lastOdometerKm } : {}),
+    ...(note !== undefined ? { note } : {}),
+  };
+};
+
 module.exports = {
   loginSchema,
   refreshTokenSchema,
@@ -256,4 +437,13 @@ module.exports = {
   itemDetailSchema,
   itemCreateSchema,
   itemUpdateSchema,
+  vehicleCatalogListSchema,
+  vehiclesListSchema,
+  vehicleCreateSchema,
+  vehicleIdSchema,
+  vehicleUpdateSchema,
+  fuelRecordsListSchema,
+  fuelRecordCreateSchema,
+  fuelRecordIdSchema,
+  fuelRecordUpdateSchema,
 };

@@ -1,5 +1,6 @@
 const { verifyJwt } = require("../utils/jwt");
 const { createAppError } = require("../utils/app-error");
+const { isAccessTokenRevoked } = require("../services/auth-session");
 
 const AUTH_ERROR = createAppError({
   code: "AUTH_REQUIRED",
@@ -23,10 +24,17 @@ const attachUserFromToken = (ctx) => {
   }
   try {
     const payload = verifyJwt(token, process.env.JWT_SECRET || "dev-secret");
+    if (isAccessTokenRevoked(payload)) {
+      throw AUTH_ERROR;
+    }
     ctx.state.user = {
       id: payload.sub,
       role: payload.role || "user",
       openid: payload.openid,
+    };
+    ctx.state.auth = {
+      token,
+      payload,
     };
     return true;
   } catch (err) {
