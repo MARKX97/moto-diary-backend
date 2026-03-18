@@ -1,14 +1,17 @@
 const isLocalDev = () => process.env.IS_LOCAL_DEV === "true";
 const isDebugLogEnabled = () => process.env.SENTRY_DEBUG_LOG === "true";
+const getEnvironment = () => process.env.APP_ENV || process.env.NODE_ENV || "unknown";
+const isForceEnabled = () => process.env.SENTRY_FORCE_ENABLE === "true";
+const isMainEnv = () => getEnvironment() === "main";
 
 const isEnabled = () => {
-  if (isLocalDev()) return false;
   if (process.env.SENTRY_ENABLED !== "true") return false;
   if (!process.env.SENTRY_DSN) return false;
+  if (isForceEnabled()) return true;
+  if (isLocalDev()) return false;
+  if (!isMainEnv()) return false;
   return true;
 };
-
-const getEnvironment = () => process.env.APP_ENV || process.env.NODE_ENV || "unknown";
 
 let sentryClient = null;
 let initTried = false;

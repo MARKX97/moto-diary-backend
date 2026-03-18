@@ -124,7 +124,12 @@ wx.cloud.callFunction({
 启用条件（同时满足才会上报）：
 - `SENTRY_ENABLED=true`
 - `SENTRY_DSN` 已配置
+- `APP_ENV=main`
 - 非本地联调（`IS_LOCAL_DEV=true` 时强制不上报）
+
+dev 联调测试（按需临时开启）：
+- 额外设置 `SENTRY_FORCE_ENABLE=true` 可绕过 `APP_ENV/IS_LOCAL_DEV` 限制，用于验证上报链路。
+- 建议仅在短时联调使用，验证后关闭，避免 dev 噪声进入正式告警。
 
 推荐在云函数 `api` 的运行时环境变量中配置：
 - `SENTRY_ENABLED=true`
