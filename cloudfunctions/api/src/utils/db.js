@@ -56,6 +56,20 @@ const updateDoc = async (docRef, updates) => {
   return docRef.update(updates);
 };
 
+const updateQuery = async (queryRef, updates) => {
+  if (getDbMode() === "wx") {
+    return queryRef.update({ data: updates });
+  }
+  return queryRef.update(updates);
+};
+
+const getUpdatedCount = (result) => {
+  if (!result || typeof result !== "object") return 0;
+  if (Number.isFinite(result.updated)) return Number(result.updated);
+  if (result.stats && Number.isFinite(result.stats.updated)) return Number(result.stats.updated);
+  return 0;
+};
+
 const buildPrefixRegExp = (value, options = "i") => {
   const db = getDb();
   if (db && typeof db.RegExp === "function") {
@@ -72,5 +86,7 @@ module.exports = {
   getDbMode,
   addDoc,
   updateDoc,
+  updateQuery,
+  getUpdatedCount,
   buildPrefixRegExp,
 };

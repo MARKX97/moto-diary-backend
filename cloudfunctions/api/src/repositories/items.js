@@ -17,9 +17,6 @@ const buildListConditions = ({ city, type, tag }) => {
     conditions.tags = tag;
   }
 
-  // Current stage keeps list query conservative: public only.
-  conditions.visibility = "public";
-
   return conditions;
 };
 
@@ -77,6 +74,11 @@ const updateItemById = async (id, updates) => {
   return getItemById(id);
 };
 
+const deleteItemById = async (id) => {
+  await getItemsCollection().doc(id).remove();
+  return true;
+};
+
 module.exports = {
   buildListConditions,
   queryItemsByOrder,
@@ -84,4 +86,5 @@ module.exports = {
   getItemById,
   createItem,
   updateItemById,
+  deleteItemById,
 };

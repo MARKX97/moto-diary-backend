@@ -44,6 +44,13 @@ const ensureArrayOfString = (value, field, maxSize, eachMaxLen) => {
   return value.map((item, idx) => ensureString(item, `${field}[${idx}]`, 1, eachMaxLen));
 };
 
+const normalizeOptionalId = (value, field) => {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  return ensureString(value, field, 1, 128);
+};
+
 const normalizeLocation = (location) => {
   if (location === undefined) return undefined;
   if (!location || typeof location !== "object") {
@@ -171,7 +178,8 @@ const itemCreateSchema = (payload) => {
   const route = normalizeRoute(payload.route);
   const tags = ensureArrayOfString(payload.tags, "tags", 10, 24);
   const visibility = normalizeVisibility(payload.visibility, "public");
-  const groupId = ensureOptionalString(payload.groupId, "groupId", 1, 128);
+  const groupId = normalizeOptionalId(payload.groupId, "groupId");
+  const fuelRecordId = normalizeOptionalId(payload.fuelRecordId, "fuelRecordId");
 
   if (type === "route" && !route) {
     throw makeValidationError("route is required when type=route");
@@ -179,10 +187,6 @@ const itemCreateSchema = (payload) => {
   if (visibility === "group" && !groupId) {
     throw makeValidationError("groupId is required when visibility=group");
   }
-  if (groupId && !["group", "private"].includes(visibility)) {
-    throw makeValidationError("groupId is only allowed when visibility is group/private");
-  }
-
   return {
     ...(title !== undefined ? { title } : {}),
     content,
@@ -192,6 +196,7 @@ const itemCreateSchema = (payload) => {
     tags,
     visibility,
     ...(groupId !== undefined ? { groupId } : {}),
+    ...(fuelRecordId !== undefined ? { fuelRecordId } : {}),
   };
 };
 
@@ -206,6 +211,7 @@ const itemUpdateSchema = (payload) => {
     "tags",
     "visibility",
     "groupId",
+    "fuelRecordId",
   ].some((key) => Object.prototype.hasOwnProperty.call(payload, key));
   if (!hasAnyField) {
     throw makeValidationError("at least one updatable field is required");
@@ -224,15 +230,19 @@ const itemUpdateSchema = (payload) => {
   const visibility =
     payload.visibility === undefined ? undefined : normalizeVisibility(payload.visibility, "public");
   const groupId =
-    payload.groupId === undefined ? undefined : ensureOptionalString(payload.groupId, "groupId", 1, 128);
+    payload.groupId === undefined ? undefined : normalizeOptionalId(payload.groupId, "groupId");
+  const hasFuelRecordId = Object.prototype.hasOwnProperty.call(payload, "fuelRecordId");
+  let fuelRecordId;
+  if (hasFuelRecordId) {
+    fuelRecordId =
+      payload.fuelRecordId === "" || payload.fuelRecordId === null
+        ? ""
+        : normalizeOptionalId(payload.fuelRecordId, "fuelRecordId");
+  }
 
   if (visibility === "group" && !groupId) {
     throw makeValidationError("groupId is required when visibility=group");
   }
-  if (groupId && visibility !== undefined && !["group", "private"].includes(visibility)) {
-    throw makeValidationError("groupId is only allowed when visibility is group/private");
-  }
-
   return {
     id,
     ...(title !== undefined ? { title } : {}),
@@ -243,6 +253,7 @@ const itemUpdateSchema = (payload) => {
     ...(tags !== undefined ? { tags } : {}),
     ...(visibility !== undefined ? { visibility } : {}),
     ...(groupId !== undefined ? { groupId } : {}),
+    ...(hasFuelRecordId ? { fuelRecordId } : {}),
   };
 };
 
@@ -447,6 +458,153 @@ const fuelRecordUpdateSchema = (payload) => {
   };
 };
 
+const usersProfileUpdateSchema = (payload) => {
+  const hasAnyField = ["nickname", "nicknameSource", "avatarSource", "avatarUrl"].some((key) =>
+    Object.prototype.hasOwnProperty.call(payload, key)
+  );
+  if (!hasAnyField) {
+    throw makeValidationError("at least one profile field is required");
+  }
+
+  const nickname = payload.nickname === undefined ? undefined : ensureString(payload.nickname, "nickname", 1, 20);
+  const nicknameSource =
+    payload.nicknameSource === undefined
+      ? undefined
+      : ensureString(payload.nicknameSource, "nicknameSource", 1, 16);
+  const avatarSource =
+    payload.avatarSource === undefined ? undefined : ensureString(payload.avatarSource, "avatarSource", 1, 16);
+  const avatarUrl = payload.avatarUrl === undefined ? undefined : ensureString(payload.avatarUrl, "avatarUrl", 1, 1024);
+
+  if (nicknameSource !== undefined && !["manual", "wechat"].includes(nicknameSource)) {
+    throw makeValidationError("nicknameSource must be one of manual/wechat");
+  }
+  if (avatarSource !== undefined && avatarSource !== "wechat") {
+    throw makeValidationError("avatarSource only supports wechat");
+  }
+  if (nicknameSource === "manual" && !nickname) {
+    throw makeValidationError("nickname is required when nicknameSource=manual");
+  }
+  if (nicknameSource === "wechat" && !nickname) {
+    throw makeValidationError("nickname is required when nicknameSource=wechat");
+  }
+  if (avatarSource === "wechat" && !avatarUrl) {
+    throw makeValidationError("avatarUrl is required when avatarSource=wechat");
+  }
+  if (avatarUrl !== undefined && avatarSource !== "wechat") {
+    throw makeValidationError("avatarSource=wechat is required when avatarUrl is provided");
+  }
+
+  return {
+    ...(nickname !== undefined ? { nickname } : {}),
+    ...(nicknameSource !== undefined ? { nicknameSource } : {}),
+    ...(avatarSource !== undefined ? { avatarSource } : {}),
+    ...(avatarUrl !== undefined ? { avatarUrl } : {}),
+  };
+};
+
+const usersPreferencesUpdateSchema = (payload) => {
+  const hasAnyField = ["feedSortDefault", "distanceUnit", "publishVisibilityDefault", "allowNearbyRecommendation"].some(
+    (key) => Object.prototype.hasOwnProperty.call(payload, key)
+  );
+  if (!hasAnyField) {
+    throw makeValidationError("at least one preferences field is required");
+  }
+
+  const feedSortDefault =
+    payload.feedSortDefault === undefined
+      ? undefined
+      : ensureString(payload.feedSortDefault, "feedSortDefault", 1, 16);
+  const distanceUnit =
+    payload.distanceUnit === undefined ? undefined : ensureString(payload.distanceUnit, "distanceUnit", 1, 8);
+  const publishVisibilityDefault =
+    payload.publishVisibilityDefault === undefined
+      ? undefined
+      : ensureString(payload.publishVisibilityDefault, "publishVisibilityDefault", 1, 16);
+  const allowNearbyRecommendation =
+    payload.allowNearbyRecommendation === undefined
+      ? undefined
+      : parseBool(payload.allowNearbyRecommendation, "allowNearbyRecommendation");
+
+  if (feedSortDefault !== undefined && !["hot", "new", "distance"].includes(feedSortDefault)) {
+    throw makeValidationError("feedSortDefault must be one of hot/new/distance");
+  }
+  if (distanceUnit !== undefined && !["km", "mi"].includes(distanceUnit)) {
+    throw makeValidationError("distanceUnit must be one of km/mi");
+  }
+  if (
+    publishVisibilityDefault !== undefined &&
+    !["public", "group", "private"].includes(publishVisibilityDefault)
+  ) {
+    throw makeValidationError("publishVisibilityDefault must be one of public/group/private");
+  }
+
+  return {
+    ...(feedSortDefault !== undefined ? { feedSortDefault } : {}),
+    ...(distanceUnit !== undefined ? { distanceUnit } : {}),
+    ...(publishVisibilityDefault !== undefined ? { publishVisibilityDefault } : {}),
+    ...(allowNearbyRecommendation !== undefined ? { allowNearbyRecommendation } : {}),
+  };
+};
+
+const feedbackCreateSchema = (payload) => {
+  const text = ensureString(payload.text, "text", 1, 500);
+  const contact = payload.contact === undefined ? undefined : ensureString(payload.contact, "contact", 1, 100);
+  return {
+    text,
+    ...(contact !== undefined ? { contact } : {}),
+  };
+};
+
+const groupsListSchema = (payload) => {
+  const page = parseNumber(payload.page, 1);
+  const pageSize = parseNumber(payload.pageSize, 10);
+  if (!Number.isInteger(page) || page < 1) {
+    throw makeValidationError("page must be >= 1");
+  }
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50) {
+    throw makeValidationError("pageSize must be between 1 and 50");
+  }
+  return { page, pageSize };
+};
+
+const groupCreateSchema = (payload) => {
+  const name = ensureString(payload.name, "name", 1, 40);
+  const description =
+    payload.description === undefined ? undefined : ensureString(payload.description, "description", 1, 200);
+  const privacy = payload.privacy === undefined ? "public" : ensureString(payload.privacy, "privacy", 1, 16);
+  if (!["public", "private"].includes(privacy)) {
+    throw makeValidationError("privacy must be one of public/private");
+  }
+  return {
+    name,
+    ...(description !== undefined ? { description } : {}),
+    privacy,
+  };
+};
+
+const groupIdSchema = (payload) => ({
+  id: ensureString(payload.id, "id", 1, 128),
+});
+
+const groupTransferSchema = (payload) => ({
+  id: ensureString(payload.id, "id", 1, 128),
+  toUserId: ensureString(payload.toUserId, "toUserId", 1, 128),
+});
+
+const groupPrivacySchema = (payload) => {
+  const id = ensureString(payload.id, "id", 1, 128);
+  const privacy = ensureString(payload.privacy, "privacy", 1, 16);
+  if (!["public", "private"].includes(privacy)) {
+    throw makeValidationError("privacy must be one of public/private");
+  }
+  return { id, privacy };
+};
+
+const groupKickSchema = (payload) => ({
+  id: ensureString(payload.id, "id", 1, 128),
+  userId: ensureString(payload.userId, "userId", 1, 128),
+});
+
 module.exports = {
   loginSchema,
   refreshTokenSchema,
@@ -464,4 +622,13 @@ module.exports = {
   fuelRecordCreateSchema,
   fuelRecordIdSchema,
   fuelRecordUpdateSchema,
+  usersProfileUpdateSchema,
+  usersPreferencesUpdateSchema,
+  feedbackCreateSchema,
+  groupsListSchema,
+  groupCreateSchema,
+  groupIdSchema,
+  groupTransferSchema,
+  groupPrivacySchema,
+  groupKickSchema,
 };

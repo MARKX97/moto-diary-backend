@@ -32,6 +32,20 @@ pnpm install
 pnpm --dir cloudfunctions/api install
 ```
 
+## 测试与契约
+
+运行后端基础回归测试（schema 校验 + 幂等入口 + 契约一致性）：
+
+```bash
+pnpm test
+```
+
+机器可读接口契约：
+- `docs/api-contract.v1.json`
+
+说明：
+- 契约中的 `alias` 与云函数路由表一一对应，`tests/api-contract.test.js` 会校验别名是否仍存在，避免文档与代码漂移。
+
 ## 本地联调（前端只切 baseURL）
 
 1) 启动本地后端网关：
@@ -45,8 +59,9 @@ pnpm run dev:api
 - `API_LOCAL_HOST`（默认 `127.0.0.1`）
 - `API_LOCAL_PORT`（默认 `3100`）
 - `ALLOW_LOCAL_LOGIN_FALLBACK=true`（本地联调允许 `login` 使用本地 openid 回退）
+- `RATE_LIMITS_BACKEND`（`db|memory`，默认 `db`）
 - `LOGIN_RATE_LIMIT_PER_HOUR`（默认 `30`）
-- `ANON_FEED_QUOTA_PER_DAY`（默认 `20`）
+- `ANON_FEED_QUOTA_PER_DAY`（默认 `10`）
 - `ACCESS_TOKEN_TTL_SEC`（默认 `7200`）
 - `REFRESH_TOKEN_TTL_SEC`（默认 `2592000`）
 
@@ -59,9 +74,47 @@ pnpm run dev:api
 - `POST /api/v1/login`
 - `POST /api/v1/token/refresh`
 - `POST /api/v1/logout`
-- `GET /api/v1/items`
-
+- `GET /api/v1/users/me`
+- `PUT /api/v1/users/me/profile`
+- `GET /api/v1/users/me/preferences`
+- `PUT /api/v1/users/me/preferences`
+- `GET /api/v1/posts`
+- `POST /api/v1/posts`
+- `GET /api/v1/posts/:id`
+- `PUT /api/v1/posts/:id`
+- `DELETE /api/v1/posts/:id`
+- `POST /api/v1/posts/:id/like`
+- `POST /api/v1/posts/:id/recommend`
+- `POST /api/v1/posts/:id/share`
+- `POST /api/v1/feedback`
+- `GET /api/v1/groups`
+- `POST /api/v1/groups`
+- `GET /api/v1/groups/:id`
+- `POST /api/v1/groups/:id/join`
+- `POST /api/v1/groups/:id/leave`
+- `POST /api/v1/groups/:id/transfer`
+- `PATCH /api/v1/groups/:id/privacy`
+- `POST /api/v1/groups/:id/kick`
+- `GET /api/v1/vehicle-catalog/brands`
+- `GET /api/v1/vehicle-catalog`
+- `GET /api/v1/vehicles`
+- `POST /api/v1/vehicles`
+- `PUT /api/v1/vehicles/:id`
+- `DELETE /api/v1/vehicles/:id`
+- `GET /api/v1/fuel-records`
+- `POST /api/v1/fuel-records`
+- `PATCH /api/v1/fuel-records/:id`
+- `DELETE /api/v1/fuel-records/:id`
 新增云函数路由时，需要同步在 `scripts/dev-server.js` 增加映射。
+
+社区列表可见性规则（`GET /api/v1/posts`）：
+- 未登录：仅 `public`
+- 已登录：`public` + 本人内容（含 `private`）+ 所属组内容（`visibility=group`）
+- 未登录快照：首次请求会固化当日 10 条（`meta.frozen=true`），同设备当日后续请求始终返回该 10 条快照，不再返回 429 配额错误。
+
+写接口幂等策略：
+- 强制（缺 `Idempotency-Key` 会报错）：`POST /api/v1/posts`、`POST /api/v1/fuel-records`
+- 兼容（有 `Idempotency-Key` 启用幂等，无 key 按资源语义处理）：其余写接口（`vehicles/groups/feedback/posts.update/fuel-records.patch`）
 
 ## 免费套餐推荐接入（wx.cloud.callFunction）
 
@@ -93,7 +146,7 @@ wx.cloud.callFunction({
 ```
 
 当前云函数已兼容两套 `$url`：
-- 简写：`health` / `login` / `token.refresh` / `items.list`
+- 简写：`health` / `login` / `token.refresh` / `posts.list`
 - HTTP 风格：`api/v1/health` / `api/v1/login` / `api/v1/token/refresh` / `api/v1/items`
 
 车型品牌总表接口（前端“先选品牌”）：
@@ -132,6 +185,10 @@ wx.cloud.callFunction({
 - `APP_ENV=main`
 - 非本地联调（`IS_LOCAL_DEV=true` 时强制不上报）
 
+环境名说明：
+- 上报开关判断仍基于 `APP_ENV`（仅 `main` 默认上报）
+- Sentry 事件里的 `environment` 字段优先使用 `SENTRY_ENV`，未配置时回退到 `APP_ENV`
+
 dev 联调测试（按需临时开启）：
 - 额外设置 `SENTRY_FORCE_ENABLE=true` 可绕过 `APP_ENV/IS_LOCAL_DEV` 限制，用于验证上报链路。
 - 建议仅在短时联调使用，验证后关闭，避免 dev 噪声进入正式告警。
@@ -140,10 +197,33 @@ dev 联调测试（按需临时开启）：
 - `SENTRY_ENABLED=true`
 - `SENTRY_DSN=<your sentry dsn>`
 - `APP_ENV=main`
+- `SENTRY_ENV=production`（可选，推荐；用于 Sentry 展示环境名）
 - `SENTRY_RELEASE`（可选，建议填版本号或 commit）
 - `SENTRY_TRACES_SAMPLE_RATE`（可选，默认 `0`）
 
 本地 `pnpm run dev:api` 联调默认不触发上报，用于避免 dev 噪声数据进入 Sentry。
+
+### 本地/线上上报策略（推荐）
+
+- 本地默认不上报：`pnpm run dev:api`（不设置 `SENTRY_FORCE_ENABLE`）
+- 本地临时上报：只改本地 `.env.local` 后重启 `dev:api`
+- main 发布后自动上报：保持云函数 `api` 环境变量为 `SENTRY_ENABLED=true` + `SENTRY_DSN` + `APP_ENV=main`
+
+本地配置文件位置：`moto-diary-backend/.env.local`（仅本地使用，不提交）
+
+可直接使用：
+
+```bash
+# 默认不开启本地 Sentry（注释/删除 SENTRY_FORCE_ENABLE 即可）
+SENTRY_ENABLED=true
+SENTRY_DSN=<your sentry dsn>
+APP_ENV=dev
+SENTRY_ENV=local
+# SENTRY_FORCE_ENABLE=true
+```
+
+当你需要本地验证上报时，取消注释 `SENTRY_FORCE_ENABLE=true`，保存并重启 `pnpm run dev:api`。
+验证完成后再注释掉，恢复本地默认不上报。
 
 业务代码可直接复用封装：
 
@@ -190,6 +270,11 @@ node scripts/import-catalog.js --env <TCB_ENV_ID> --file ../crawler_output/vehic
 `vehicle_catalog`：
 - `idx_brand_hotRank`：`brand` asc + `hotRank` asc
 - `uniq_model_id`：`model_id` asc unique
+
+`rate_limits`：
+- `uniq_key`：`key` asc unique
+- `idx_scope_subject`：`scope` asc + `subject` asc
+- `ttl_expiredAt`：`expiredAt` TTL
 
 ## 常见问题
 

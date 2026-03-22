@@ -24,7 +24,7 @@ const listVehiclesController = async (ctx) => {
 
 const createVehicleController = async (ctx) => {
   const ownerId = ctx.state.user.id;
-  const created = await createVehicleForUser({ ownerId, payload: ctx.data });
+  const created = await createVehicleForUser({ ctx, ownerId, payload: ctx.data });
   return {
     success: true,
     data: created,
@@ -34,6 +34,7 @@ const createVehicleController = async (ctx) => {
 const updateVehicleController = async (ctx) => {
   const user = ctx.state.user;
   const updated = await updateVehicleForUser({
+    ctx,
     vehicleId: ctx.data.id,
     user,
     payload: ctx.data,
@@ -47,6 +48,7 @@ const updateVehicleController = async (ctx) => {
 const deleteVehicleController = async (ctx) => {
   const user = ctx.state.user;
   const res = await deleteVehicleForUser({
+    ctx,
     vehicleId: ctx.data.id,
     user,
   });

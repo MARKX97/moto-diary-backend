@@ -1,12 +1,27 @@
 const isLocalDev = () => process.env.IS_LOCAL_DEV === "true";
 const isDebugLogEnabled = () => process.env.SENTRY_DEBUG_LOG === "true";
-const getEnvironment = () => process.env.APP_ENV || process.env.NODE_ENV || "unknown";
+const getAppEnvironment = () => process.env.APP_ENV || process.env.NODE_ENV || "unknown";
+const getSentryEnvironment = () =>
+  process.env.SENTRY_ENV || process.env.APP_ENV || process.env.NODE_ENV || "unknown";
 const isForceEnabled = () => process.env.SENTRY_FORCE_ENABLE === "true";
-const isMainEnv = () => getEnvironment() === "main";
+const isMainEnv = () => getAppEnvironment() === "main";
+let sentryModuleAvailable;
+
+const hasSentryModule = () => {
+  if (typeof sentryModuleAvailable === "boolean") return sentryModuleAvailable;
+  try {
+    require.resolve("@sentry/node");
+    sentryModuleAvailable = true;
+  } catch (_err) {
+    sentryModuleAvailable = false;
+  }
+  return sentryModuleAvailable;
+};
 
 const isEnabled = () => {
   if (process.env.SENTRY_ENABLED !== "true") return false;
   if (!process.env.SENTRY_DSN) return false;
+  if (!hasSentryModule()) return false;
   if (isForceEnabled()) return true;
   if (isLocalDev()) return false;
   if (!isMainEnv()) return false;
@@ -29,7 +44,7 @@ const getSentry = () => {
     const Sentry = require("@sentry/node");
     Sentry.init({
       dsn: process.env.SENTRY_DSN,
-      environment: getEnvironment(),
+      environment: getSentryEnvironment(),
       release: process.env.SENTRY_RELEASE || undefined,
       tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE || 0),
     });
@@ -39,7 +54,7 @@ const getSentry = () => {
     sentryClient = Sentry;
     return sentryClient;
   } catch (err) {
-    console.error("[sentry] init failed:", err && err.message ? err.message : err);
+    console.warn("[sentry] disabled:", err && err.message ? err.message : err);
     return null;
   }
 };

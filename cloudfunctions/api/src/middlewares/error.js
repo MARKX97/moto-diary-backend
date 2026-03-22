@@ -1,5 +1,5 @@
 const { logger } = require("../utils/logger");
-const { captureException, isSentryEnabled } = require("../utils/sentry");
+const { captureException, captureMessage, isSentryEnabled } = require("../utils/sentry");
 const { toAppError } = require("../utils/app-error");
 const { classifyError } = require("../utils/error-classification");
 
@@ -7,6 +7,7 @@ const buildClientError = (error, requestId) => {
   const payload = {
     code: error.code,
     message: error.expose ? error.message : "Internal error",
+    status: error.status,
   };
   const details = {
     ...(error.details && typeof error.details === "object" ? error.details : {}),
@@ -39,7 +40,7 @@ const withErrorHandling = async (ctx, next) => {
 
     let sentryEventId;
     if (isSentryEnabled()) {
-      sentryEventId = await captureException(appError, {
+      const sentryScope = {
         level: meta.severity,
         fingerprint: [
           "api-error",
@@ -63,9 +64,18 @@ const withErrorHandling = async (ctx, next) => {
           expose: appError.expose,
           details: appError.details,
         },
-      });
+      };
+
+      if (meta.status >= 500) {
+        sentryEventId = await captureException(appError, sentryScope);
+      } else if (meta.status >= 400) {
+        sentryEventId = await captureMessage(
+          `[${meta.code}] ${appError.message || "Client error"}`,
+          sentryScope
+        );
+      }
     }
-    logger.error(appError, {
+    const logMeta = {
       requestId,
       route,
       method,
@@ -76,7 +86,17 @@ const withErrorHandling = async (ctx, next) => {
       statusFamily: meta.statusFamily,
       severity: meta.severity,
       sentryEventId,
-    });
+      rawErrorName: err && err.name ? err.name : undefined,
+      rawErrorMessage: err && err.message ? err.message : String(err),
+      rawErrorStack: err && err.stack ? err.stack : undefined,
+    };
+    if (meta.severity === "error") {
+      logger.error(appError, logMeta);
+    } else if (meta.severity === "warning") {
+      logger.warn(appError.message, logMeta);
+    } else {
+      logger.info(appError.message, logMeta);
+    }
     ctx.body = {
       success: false,
       error: buildClientError(appError, requestId),

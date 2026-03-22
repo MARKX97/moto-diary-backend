@@ -5,6 +5,7 @@ const {
   revokeAccessToken,
   revokeRefreshSessionsByUserId,
 } = require("../services/auth-session");
+const { ensureUserForLogin } = require("../services/users");
 const { ensureLoginRateLimit } = require("../services/access-control");
 const { extractToken } = require("../middlewares/auth");
 const { createAppError } = require("../utils/app-error");
@@ -25,17 +26,22 @@ const resolveRefreshToken = (ctx) => {
 };
 
 const loginController = async (ctx) => {
-  ensureLoginRateLimit(ctx);
+  await ensureLoginRateLimit(ctx);
   const { code } = ctx.data;
   const identity = await resolveWechatIdentity(code);
   const session = issueLoginTokens(identity);
+  const user = await ensureUserForLogin({
+    userId: session.user.id,
+    openid: session.user.openid,
+    role: session.user.role,
+  });
 
   return {
     success: true,
     data: {
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,
-      user: session.user,
+      user,
     },
   };
 };

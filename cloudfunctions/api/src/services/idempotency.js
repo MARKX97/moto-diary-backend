@@ -58,6 +58,8 @@ const requireIdempotencyKey = (ctx) => {
   return key;
 };
 
+const hasIdempotencyKey = (ctx) => Boolean(getIdempotencyKeyFromEvent(ctx && ctx.event));
+
 const runIdempotent = async ({ ctx, path, userId, payload, execute }) => {
   const key = requireIdempotencyKey(ctx);
   const bodyHash = hashPayload(payload);
@@ -127,7 +129,16 @@ const runIdempotent = async ({ ctx, path, userId, payload, execute }) => {
   return result;
 };
 
+const runIdempotentIfPresent = async ({ ctx, path, userId, payload, execute }) => {
+  if (!hasIdempotencyKey(ctx)) {
+    return execute();
+  }
+  return runIdempotent({ ctx, path, userId, payload, execute });
+};
+
 module.exports = {
   runIdempotent,
+  runIdempotentIfPresent,
   requireIdempotencyKey,
+  hasIdempotencyKey,
 };

@@ -1,0 +1,22 @@
+{
+  "version": "2.0",
+  "envId": "cloud1-2gjxfacv10492945",
+  "functionRoot": "./cloudfunctions",
+  "functionDefaultConfig": {
+    "runtime": "Nodejs18.15",
+    "handler": "index.main",
+    "timeout": 15,
+    "installDependency": true,
+    "ignore": [
+      "node_modules",
+      "node_modules/**/*",
+      ".git",
+      ".DS_Store"
+    ]
+  },
+  "functions": [
+    {
+      "name": "api"
+    }
+  ]
+}

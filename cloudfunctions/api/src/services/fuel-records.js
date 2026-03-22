@@ -1,5 +1,5 @@
 const { createAppError } = require("../utils/app-error");
-const { runIdempotent } = require("./idempotency");
+const { runIdempotent, runIdempotentIfPresent } = require("./idempotency");
 const { getVehicleById } = require("../repositories/vehicles");
 const {
   listFuelRecordsByOwner,
@@ -175,7 +175,7 @@ const updateLatestFuelRecordForUser = async ({ ctx, recordId, payload }) => {
   const existing = await getFuelRecordById(recordId);
   ensureRecordAccess(existing, user);
 
-  return runIdempotent({
+  return runIdempotentIfPresent({
     ctx,
     path: "/api/v1/fuel-records/:id",
     userId: user.id,
