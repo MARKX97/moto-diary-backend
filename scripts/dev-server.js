@@ -49,7 +49,7 @@ const routeMap = {
   "PUT /api/v1/users/me/profile": "users.updateProfile",
   "GET /api/v1/users/me/preferences": "users.preferences",
   "PUT /api/v1/users/me/preferences": "users.updatePreferences",
-  "GET /api/v1/posts": "posts.list",
+  "GET /api/v1/community/feed": "feed.list",
   "POST /api/v1/posts": "posts.create",
   "POST /api/v1/feedback": "feedback.create",
   "GET /api/v1/vehicle-catalog/brands": "vehicle.catalog.brands",
@@ -164,6 +164,14 @@ const dynamicRouteMatchers = [
     pattern: /^\/api\/v1\/groups\/([^/]+)\/leave$/,
     build: (match) => ({
       route: "groups.leave",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+  {
+    method: "POST",
+    pattern: /^\/api\/v1\/groups\/([^/]+)\/disband$/,
+    build: (match) => ({
+      route: "groups.disband",
       payload: { id: decodeURIComponent(match[1]) },
     }),
   },

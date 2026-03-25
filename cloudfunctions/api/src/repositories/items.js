@@ -1,6 +1,6 @@
 const { getDb, addDoc, updateDoc } = require("../utils/db");
 
-const ITEMS_COLLECTION = "items";
+const ITEMS_COLLECTION = "posts";
 
 const getItemsCollection = () => getDb().collection(ITEMS_COLLECTION);
 
@@ -50,6 +50,14 @@ const queryItemsForDistanceSort = async ({ conditions, page, pageSize, sampleSiz
   };
 };
 
+const hasMoreItemsThan = async ({ conditions = {}, limit = 0 }) => {
+  const threshold = Number.isInteger(Number(limit)) ? Number(limit) : 0;
+  const fetchSize = Math.max(1, threshold + 1);
+  const res = await getItemsCollection().where(conditions).limit(fetchSize).get();
+  const rows = Array.isArray(res && res.data) ? res.data : [];
+  return rows.length > threshold;
+};
+
 const getItemById = async (id) => {
   const res = await getItemsCollection().doc(id).get();
   if (!res) return null;
@@ -83,6 +91,7 @@ module.exports = {
   buildListConditions,
   queryItemsByOrder,
   queryItemsForDistanceSort,
+  hasMoreItemsThan,
   getItemById,
   createItem,
   updateItemById,

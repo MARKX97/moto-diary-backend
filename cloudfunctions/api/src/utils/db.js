@@ -1,5 +1,6 @@
 let cachedDb = null;
 let cachedMode = null;
+const isLocalDev = () => process.env.IS_LOCAL_DEV === "true";
 
 const initWxServerSdkDb = () => {
   // Prefer cloud function native SDK in Tencent Cloud runtime.
@@ -25,6 +26,18 @@ const initCloudbaseNodeSdkDb = () => {
 
 const getDb = () => {
   if (cachedDb) return cachedDb;
+
+  // Local adapter runs outside Cloud Function runtime.
+  // Prefer Node SDK in local mode to avoid wx-server-sdk auth failures.
+  if (isLocalDev()) {
+    try {
+      cachedDb = initCloudbaseNodeSdkDb();
+      return cachedDb;
+    } catch (_err) {
+      cachedDb = initWxServerSdkDb();
+      return cachedDb;
+    }
+  }
 
   try {
     cachedDb = initWxServerSdkDb();

@@ -61,7 +61,7 @@ pnpm run dev:api
 - `ALLOW_LOCAL_LOGIN_FALLBACK=true`（本地联调允许 `login` 使用本地 openid 回退）
 - `RATE_LIMITS_BACKEND`（`db|memory`，默认 `db`）
 - `LOGIN_RATE_LIMIT_PER_HOUR`（默认 `30`）
-- `ANON_FEED_QUOTA_PER_DAY`（默认 `10`）
+- `ANON_FEED_QUOTA_PER_DAY`（默认 `10`，未登录快照最大条数）
 - `ACCESS_TOKEN_TTL_SEC`（默认 `7200`）
 - `REFRESH_TOKEN_TTL_SEC`（默认 `2592000`）
 
@@ -78,7 +78,7 @@ pnpm run dev:api
 - `PUT /api/v1/users/me/profile`
 - `GET /api/v1/users/me/preferences`
 - `PUT /api/v1/users/me/preferences`
-- `GET /api/v1/posts`
+- `GET /api/v1/community/feed`
 - `POST /api/v1/posts`
 - `GET /api/v1/posts/:id`
 - `PUT /api/v1/posts/:id`
@@ -92,6 +92,7 @@ pnpm run dev:api
 - `GET /api/v1/groups/:id`
 - `POST /api/v1/groups/:id/join`
 - `POST /api/v1/groups/:id/leave`
+- `POST /api/v1/groups/:id/disband`
 - `POST /api/v1/groups/:id/transfer`
 - `PATCH /api/v1/groups/:id/privacy`
 - `POST /api/v1/groups/:id/kick`
@@ -107,10 +108,18 @@ pnpm run dev:api
 - `DELETE /api/v1/fuel-records/:id`
 新增云函数路由时，需要同步在 `scripts/dev-server.js` 增加映射。
 
-社区列表可见性规则（`GET /api/v1/posts`）：
+社区列表可见性规则（`GET /api/v1/community/feed`）：
 - 未登录：仅 `public`
 - 已登录：`public` + 本人内容（含 `private`）+ 所属组内容（`visibility=group`）
-- 未登录快照：首次请求会固化当日 10 条（`meta.frozen=true`），同设备当日后续请求始终返回该 10 条快照，不再返回 429 配额错误。
+- 未登录设备标识：匿名请求需提供 `x-device-id`（小程序 `OPENID` 可作为身份兜底）。
+- 未登录快照：仅当公开数据量大于 10 条时启用；按“设备 + 查询条件（sort/city/type/tag/定位分桶）+ 中国自然日（UTC+8）”固化快照，同维度当日后续请求返回同一批快照，不再返回 429 配额错误。
+- 未登录实时：当公开数据量 <= 10 条时，直接返回实时列表（`frozen=false`）。
+- 关联组队内容会聚合返回 `groupSummary`：`id/name/memberCount/memberAvatars`。
+- 头像字段统一转换：接口返回前会批量把 `cloud://` 头像 fileID 转为可访问临时 URL（内存缓存 1 天）；`author.avatar` 会同时保留 `author.avatarFileId`。
+
+组队规则补充：
+- `POST /api/v1/groups/:id/join` 返回 `{ joined, notifiedCaptain }`；新成员首次加入成功时，后端会 best-effort 写入队长通知。
+- `GET /api/v1/groups/:id` 额外返回 `memberCount` 与 `memberProfiles`（含 `userId/nickname/avatar/avatarFileId`，其中 `avatar` 为可访问 URL）。
 
 写接口幂等策略：
 - 强制（缺 `Idempotency-Key` 会报错）：`POST /api/v1/posts`、`POST /api/v1/fuel-records`
@@ -130,13 +139,25 @@ wx.cloud.callFunction({
 });
 ```
 
+`refresh` 接口请在 body 传 `refreshToken`（不要在 `Authorization` 里传 access token）：
+
+```js
+wx.cloud.callFunction({
+  name: "api",
+  data: {
+    $url: "api/v1/token/refresh",
+    refreshToken,
+  },
+});
+```
+
 受保护路由可通过 `data.headers.Authorization` 透传 JWT：
 
 ```js
 wx.cloud.callFunction({
   name: "api",
   data: {
-    $url: "api/v1/items",
+    $url: "api/v1/community/feed",
     headers: { Authorization: `Bearer ${token}` },
     page: 1,
     pageSize: 10,
@@ -145,9 +166,9 @@ wx.cloud.callFunction({
 });
 ```
 
-当前云函数已兼容两套 `$url`：
-- 简写：`health` / `login` / `token.refresh` / `posts.list`
-- HTTP 风格：`api/v1/health` / `api/v1/login` / `api/v1/token/refresh` / `api/v1/items`
+当前云函数 `$url`：
+- 简写：`health` / `login` / `token.refresh` / `feed.list`
+- HTTP 风格：`api/v1/health` / `api/v1/login` / `api/v1/token/refresh` / `api/v1/community/feed`
 
 车型品牌总表接口（前端“先选品牌”）：
 - `GET /api/v1/vehicle-catalog/brands`

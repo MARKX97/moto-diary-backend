@@ -1,6 +1,6 @@
 const { getDb, addDoc } = require("../utils/db");
 
-const ITEM_INTERACTIONS_COLLECTION = "item_interactions";
+const ITEM_INTERACTIONS_COLLECTION = "post_interactions";
 
 const getItemInteractionsCollection = () => getDb().collection(ITEM_INTERACTIONS_COLLECTION);
 

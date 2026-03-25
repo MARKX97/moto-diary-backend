@@ -105,11 +105,15 @@ const loginSchema = (payload) => {
 };
 
 const refreshTokenSchema = (payload) => {
-  if (payload.refreshToken === undefined || payload.refreshToken === null || payload.refreshToken === "") {
-    return {};
+  if (payload.refreshToken === undefined || payload.refreshToken === null) {
+    throw makeValidationError("refreshToken is required");
+  }
+  const refreshToken = ensureString(payload.refreshToken, "refreshToken", 8, 256).trim();
+  if (!refreshToken) {
+    throw makeValidationError("refreshToken is required");
   }
   return {
-    refreshToken: ensureString(payload.refreshToken, "refreshToken", 8, 256),
+    refreshToken,
   };
 };
 
@@ -395,6 +399,7 @@ const parsePositiveNumber = (value, field, max = Number.MAX_SAFE_INTEGER) => {
 const fuelRecordCreateSchema = (payload) => {
   const vehicleId = ensureString(payload.vehicleId, "vehicleId", 1, 128);
   const pricePerL = Number(parsePositiveNumber(payload.pricePerL, "pricePerL", 100000).toFixed(2));
+  const fuelLiters = Number(parsePositiveNumber(payload.fuelLiters, "fuelLiters", 10000).toFixed(3));
   const amountPaid = Number(parsePositiveNumber(payload.amountPaid, "amountPaid", 1000000).toFixed(2));
   const odometerKm = Number(parsePositiveNumber(payload.odometerKm, "odometerKm", 10000000).toFixed(2));
   const isFull = parseBool(payload.isFull, "isFull");
@@ -407,6 +412,7 @@ const fuelRecordCreateSchema = (payload) => {
   return {
     vehicleId,
     pricePerL,
+    fuelLiters,
     amountPaid,
     odometerKm,
     isFull,
@@ -421,7 +427,15 @@ const fuelRecordIdSchema = (payload) => ({
 
 const fuelRecordUpdateSchema = (payload) => {
   const id = ensureString(payload.id, "id", 1, 128);
-  const hasAnyField = ["pricePerL", "amountPaid", "odometerKm", "isFull", "lastOdometerKm", "note"].some((key) =>
+  const hasAnyField = [
+    "pricePerL",
+    "fuelLiters",
+    "amountPaid",
+    "odometerKm",
+    "isFull",
+    "lastOdometerKm",
+    "note",
+  ].some((key) =>
     Object.prototype.hasOwnProperty.call(payload, key)
   );
   if (!hasAnyField) {
@@ -436,6 +450,10 @@ const fuelRecordUpdateSchema = (payload) => {
     payload.amountPaid === undefined
       ? undefined
       : Number(parsePositiveNumber(payload.amountPaid, "amountPaid", 1000000).toFixed(2));
+  const fuelLiters =
+    payload.fuelLiters === undefined
+      ? undefined
+      : Number(parsePositiveNumber(payload.fuelLiters, "fuelLiters", 10000).toFixed(3));
   const odometerKm =
     payload.odometerKm === undefined
       ? undefined
@@ -450,6 +468,7 @@ const fuelRecordUpdateSchema = (payload) => {
   return {
     id,
     ...(pricePerL !== undefined ? { pricePerL } : {}),
+    ...(fuelLiters !== undefined ? { fuelLiters } : {}),
     ...(amountPaid !== undefined ? { amountPaid } : {}),
     ...(odometerKm !== undefined ? { odometerKm } : {}),
     ...(isFull !== undefined ? { isFull } : {}),

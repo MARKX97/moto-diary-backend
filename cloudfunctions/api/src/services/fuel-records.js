@@ -11,6 +11,7 @@ const {
 } = require("../repositories/fuel-records");
 
 const round = (num, digits = 2) => Number(Number(num).toFixed(digits));
+const AMOUNT_CONSISTENCY_TOLERANCE = 0.1;
 
 const ensureVehicleAccess = (vehicle, user) => {
   if (!vehicle) {
@@ -75,8 +76,29 @@ const resolveBaseOdometer = ({ latestRecord, isFull, lastOdometerKm }) => {
   });
 };
 
-const computeFuelFields = ({ vehicle, pricePerL, amountPaid, odometerKm, isFull, baseOdometer }) => {
-  const fuelLiters = round(amountPaid / pricePerL, 3);
+const ensureAmountConsistency = ({ pricePerL, fuelLiters, amountPaid }) => {
+  const expectedAmount = round(pricePerL * fuelLiters, 2);
+  const delta = Math.abs(expectedAmount - amountPaid);
+  if (delta > AMOUNT_CONSISTENCY_TOLERANCE) {
+    throw createAppError({
+      code: "VALIDATION_FAILED",
+      status: 400,
+      message: "amountPaid must match pricePerL * fuelLiters",
+      details: {
+        expectedAmount,
+        actualAmount: amountPaid,
+      },
+      expose: true,
+    });
+  }
+};
+
+const computeFuelFields = ({ vehicle, pricePerL, fuelLiters, amountPaid, odometerKm, isFull, baseOdometer }) => {
+  ensureAmountConsistency({
+    pricePerL,
+    fuelLiters,
+    amountPaid,
+  });
   if (vehicle.tankCapacityL && fuelLiters > Number(vehicle.tankCapacityL) * 1.1) {
     throw createAppError({
       code: "VALIDATION_FAILED",
@@ -143,6 +165,7 @@ const createFuelRecordForUser = async ({ ctx, payload }) => {
       const computed = computeFuelFields({
         vehicle,
         pricePerL: payload.pricePerL,
+        fuelLiters: payload.fuelLiters,
         amountPaid: payload.amountPaid,
         odometerKm: payload.odometerKm,
         isFull: payload.isFull,
@@ -196,6 +219,12 @@ const updateLatestFuelRecordForUser = async ({ ctx, recordId, payload }) => {
       const merged = {
         vehicleId: existing.vehicleId,
         pricePerL: payload.pricePerL !== undefined ? payload.pricePerL : existing.pricePerL,
+        fuelLiters:
+          payload.fuelLiters !== undefined
+            ? payload.fuelLiters
+            : Number.isFinite(Number(existing.fuelLiters))
+              ? Number(existing.fuelLiters)
+              : round(Number(existing.amountPaid) / Number(existing.pricePerL), 3),
         amountPaid: payload.amountPaid !== undefined ? payload.amountPaid : existing.amountPaid,
         odometerKm: payload.odometerKm !== undefined ? payload.odometerKm : existing.odometerKm,
         isFull: payload.isFull !== undefined ? payload.isFull : existing.isFull,
@@ -215,6 +244,7 @@ const updateLatestFuelRecordForUser = async ({ ctx, recordId, payload }) => {
       const computed = computeFuelFields({
         vehicle,
         pricePerL: merged.pricePerL,
+        fuelLiters: merged.fuelLiters,
         amountPaid: merged.amountPaid,
         odometerKm: merged.odometerKm,
         isFull: merged.isFull,

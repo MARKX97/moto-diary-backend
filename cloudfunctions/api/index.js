@@ -53,6 +53,7 @@ const {
   getGroupDetailController,
   joinGroupController,
   leaveGroupController,
+  disbandGroupController,
   transferGroupController,
   updateGroupPrivacyController,
   kickGroupMemberController,
@@ -75,6 +76,7 @@ const {
 } = require("./src/controllers/fuel-records");
 const { parsePayload } = require("./src/utils/payload");
 const { createAppError } = require("./src/utils/app-error");
+const { resolveAvatarUrlsInPayload } = require("./src/services/avatar-resolver");
 
 const normalizeRoute = (event = {}) => {
   const raw = String(event.$url || event.path || "").trim();
@@ -101,9 +103,9 @@ const throwAuthRequired = () => {
   });
 };
 
-const applyAuth = (ctx, mode) => {
+const applyAuth = async (ctx, mode) => {
   if (mode === "required") {
-    if (!attachUserFromToken(ctx)) {
+    if (!(await attachUserFromToken(ctx))) {
       throwAuthRequired();
     }
     return true;
@@ -117,7 +119,7 @@ const applyAuth = (ctx, mode) => {
 const runEntry = async (ctx, entry, params = {}) => {
   let hasUser = true;
   if (!entry.authAfterValidate) {
-    hasUser = applyAuth(ctx, entry.auth);
+    hasUser = await applyAuth(ctx, entry.auth);
   }
 
   if (entry.schema) {
@@ -126,7 +128,7 @@ const runEntry = async (ctx, entry, params = {}) => {
   }
 
   if (entry.authAfterValidate) {
-    hasUser = applyAuth(ctx, entry.auth);
+    hasUser = await applyAuth(ctx, entry.auth);
   }
 
   if (entry.afterAuth) {
@@ -135,9 +137,11 @@ const runEntry = async (ctx, entry, params = {}) => {
 
   if (entry.handle) {
     await entry.handle(ctx, params, hasUser);
+    await resolveAvatarUrlsInPayload(ctx.body, { log: ctx.state && ctx.state.log });
     return;
   }
   ctx.body = await entry.controller(ctx);
+  await resolveAvatarUrlsInPayload(ctx.body, { log: ctx.state && ctx.state.log });
 };
 
 const staticRouteTable = [
@@ -198,7 +202,7 @@ const staticRouteTable = [
     controller: createFeedbackController,
   },
   {
-    aliases: ["posts.list", "api/v1/posts"],
+    aliases: ["feed.list", "api/v1/community/feed"],
     method: "GET",
     auth: "optional",
     authAfterValidate: true,
@@ -286,6 +290,13 @@ const staticRouteTable = [
     auth: "required",
     schema: groupIdSchema,
     controller: leaveGroupController,
+  },
+  {
+    aliases: ["groups.disband"],
+    method: "POST",
+    auth: "required",
+    schema: groupIdSchema,
+    controller: disbandGroupController,
   },
   {
     aliases: ["groups.transfer"],
@@ -523,6 +534,19 @@ const pathRouteTable = [
         schema: groupIdSchema,
         buildPayload: (_ctx, params) => ({ id: params.id }),
         controller: leaveGroupController,
+      },
+    ],
+  },
+  {
+    pattern: /^api\/v1\/groups\/([^/]+)\/disband$/,
+    toParams: (match) => ({ id: decodeURIComponent(match[1]) }),
+    handlers: [
+      {
+        method: "POST",
+        auth: "required",
+        schema: groupIdSchema,
+        buildPayload: (_ctx, params) => ({ id: params.id }),
+        controller: disbandGroupController,
       },
     ],
   },

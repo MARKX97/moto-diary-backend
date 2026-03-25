@@ -4,6 +4,7 @@ const {
   getGroupDetailForUser,
   joinGroupForUser,
   leaveGroupForUser,
+  disbandGroupForUser,
   transferGroupAdminForUser,
   updateGroupPrivacyForUser,
   kickGroupMemberForUser,
@@ -76,6 +77,18 @@ const leaveGroupController = async (ctx) => {
   };
 };
 
+const disbandGroupController = async (ctx) => {
+  const result = await disbandGroupForUser({
+    ctx,
+    user: ctx.state.user,
+    groupId: ctx.data.id,
+  });
+  return {
+    success: true,
+    data: result,
+  };
+};
+
 const transferGroupController = async (ctx) => {
   const result = await transferGroupAdminForUser({
     ctx,
@@ -121,6 +134,7 @@ module.exports = {
   getGroupDetailController,
   joinGroupController,
   leaveGroupController,
+  disbandGroupController,
   transferGroupController,
   updateGroupPrivacyController,
   kickGroupMemberController,

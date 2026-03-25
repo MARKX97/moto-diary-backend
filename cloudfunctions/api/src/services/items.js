@@ -1,8 +1,10 @@
 const { createAppError } = require("../utils/app-error");
+const { getClientId } = require("../utils/client-id");
 const {
   buildListConditions,
   queryItemsByOrder,
   queryItemsForDistanceSort,
+  hasMoreItemsThan,
   getItemById,
   createItem,
   updateItemById,
@@ -18,6 +20,7 @@ const { findUsersByUserIds } = require("../repositories/users");
 
 const ITEMS_SCAN_BATCH_SIZE = 100;
 const ITEMS_SCAN_MAX_PAGES = 200;
+const CHINA_TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
 
 const clamp = (num, min, max) => Math.max(min, Math.min(max, num));
 
@@ -62,6 +65,28 @@ const toAuthorView = (ownerId, userDoc) => ({
   ...(userDoc && userDoc.avatarSource ? { avatarSource: userDoc.avatarSource } : {}),
 });
 
+const toGroupSummaryView = (group, userById) => {
+  if (!group || !group._id || group.status !== "active") return undefined;
+  const memberIds = Array.isArray(group.members)
+    ? group.members
+        .map((id) => (typeof id === "string" ? id.trim() : ""))
+        .filter(Boolean)
+    : [];
+  const memberAvatars = memberIds
+    .map((id) => {
+      const user = userById.get(id);
+      return user && typeof user.avatar === "string" ? user.avatar.trim() : "";
+    })
+    .filter(Boolean);
+
+  return {
+    id: group._id,
+    name: typeof group.name === "string" ? group.name : "",
+    memberCount: memberIds.length,
+    memberAvatars,
+  };
+};
+
 const enrichItemsWithAuthor = async (items = []) => {
   if (!Array.isArray(items) || !items.length) return [];
   const ownerIds = Array.from(
@@ -86,9 +111,61 @@ const enrichItemsWithAuthor = async (items = []) => {
   }));
 };
 
-const enrichItemWithAuthor = async (item) => {
+const enrichItemsWithGroupSummary = async (items = []) => {
+  if (!Array.isArray(items) || !items.length) return [];
+  const groupIds = Array.from(
+    new Set(
+      items
+        .map((item) => (item && typeof item.groupId === "string" ? item.groupId.trim() : ""))
+        .filter(Boolean)
+    )
+  );
+  if (!groupIds.length) return items;
+
+  const groups = await Promise.all(groupIds.map((groupId) => getGroupById(groupId)));
+  const groupById = new Map();
+  const memberIds = new Set();
+  groups.forEach((group) => {
+    if (!group || !group._id || group.status !== "active") return;
+    groupById.set(group._id, group);
+    const members = Array.isArray(group.members) ? group.members : [];
+    members.forEach((memberId) => {
+      if (typeof memberId === "string" && memberId.trim()) {
+        memberIds.add(memberId.trim());
+      }
+    });
+  });
+
+  const userDocs = await findUsersByUserIds(Array.from(memberIds));
+  const userById = new Map();
+  userDocs.forEach((doc) => {
+    const userId = doc && typeof doc.userId === "string" ? doc.userId : "";
+    if (userId) {
+      userById.set(userId, doc);
+    }
+  });
+
+  return items.map((item) => {
+    const groupId = item && typeof item.groupId === "string" ? item.groupId.trim() : "";
+    if (!groupId) return item;
+    const group = groupById.get(groupId);
+    const groupSummary = toGroupSummaryView(group, userById);
+    if (!groupSummary) return item;
+    return {
+      ...item,
+      groupSummary,
+    };
+  });
+};
+
+const enrichItemsForResponse = async (items = []) => {
+  const withAuthor = await enrichItemsWithAuthor(items);
+  return enrichItemsWithGroupSummary(withAuthor);
+};
+
+const enrichItemForResponse = async (item) => {
   if (!item || typeof item !== "object") return item;
-  const list = await enrichItemsWithAuthor([item]);
+  const list = await enrichItemsForResponse([item]);
   return list[0] || item;
 };
 
@@ -218,8 +295,14 @@ const listItems = async ({ user, page, pageSize, sort, lat, lng, city, type, tag
 
   return {
     total: result.total,
-    list: await enrichItemsWithAuthor(result.list),
+    list: await enrichItemsForResponse(result.list),
   };
+};
+
+const hasMoreAnonymousPublicItemsThanLimit = async ({ city, type, tag, limit }) => {
+  const conditions = buildListConditions({ city, type, tag });
+  conditions.visibility = "public";
+  return hasMoreItemsThan({ conditions, limit });
 };
 
 const listItemsByIds = async ({ ids = [], user = null }) => {
@@ -249,7 +332,7 @@ const listItemsByIds = async ({ ids = [], user = null }) => {
   }
   return {
     total: visible.length,
-    list: await enrichItemsWithAuthor(visible),
+    list: await enrichItemsForResponse(visible),
   };
 };
 
@@ -267,7 +350,7 @@ const canReadItem = async (item, user) => {
   return false;
 };
 
-const getItemDetail = async (id, user) => {
+const getItemDetail = async ({ id, user, ctx }) => {
   const item = await getItemById(id);
   if (!item) {
     throw createAppError({
@@ -287,7 +370,22 @@ const getItemDetail = async (id, user) => {
     });
   }
 
-  return enrichItemWithAuthor(item);
+  let target = item;
+  try {
+    target = await recordItemView({ ctx, item, user });
+  } catch (err) {
+    const log = ctx && ctx.state && ctx.state.log;
+    if (log && typeof log.warn === "function") {
+      log.warn("Record post view failed", {
+        itemId: item._id,
+        userId: user && user.id ? user.id : "",
+        errorName: err && err.name ? err.name : "",
+        errorMessage: err && err.message ? String(err.message) : "",
+      });
+    }
+  }
+
+  return enrichItemForResponse(target);
 };
 
 const computeHotScore = (stats = {}) => {
@@ -297,9 +395,13 @@ const computeHotScore = (stats = {}) => {
   return Number((likes * 3 + shares * 2 + views * 0.5).toFixed(2));
 };
 
-const buildInteractionKey = ({ action, itemId, userId, now = new Date() }) => {
-  const dayKey = now.toISOString().slice(0, 10);
-  return `${action}:${itemId}:${userId}:${dayKey}`;
+const toChinaDayKey = (now = new Date()) =>
+  new Date(now.getTime() + CHINA_TZ_OFFSET_MS).toISOString().slice(0, 10);
+
+const buildInteractionKey = ({ action, itemId, userId, actorId, now = new Date() }) => {
+  const subject = actorId || userId;
+  const dayKey = toChinaDayKey(now);
+  return `${action}:${itemId}:${subject}:${dayKey}`;
 };
 
 const isDuplicateInteractionError = (error) => {
@@ -444,7 +546,7 @@ const createItemPost = async ({ ctx, payload }) => {
       const created = await createItem(doc);
       return {
         success: true,
-        data: await enrichItemWithAuthor(created),
+        data: await enrichItemForResponse(created),
       };
     },
   });
@@ -510,7 +612,7 @@ const updateItemPost = async ({ ctx, itemId, payload }) => {
       const updated = await updateItemById(itemId, next);
       return {
         success: true,
-        data: await enrichItemWithAuthor(updated),
+        data: await enrichItemForResponse(updated),
       };
     },
   });
@@ -529,7 +631,7 @@ const deleteItemPost = async ({ ctx, itemId }) => {
 
 const incrementItemStat = async ({ item, action }) => {
   const stats = item && item.stats && typeof item.stats === "object" ? item.stats : {};
-  const field = action === "share" ? "shares" : "likes";
+  const field = action === "share" ? "shares" : action === "view" ? "views" : "likes";
   const nextStats = {
     likes: Number(stats.likes) || 0,
     shares: Number(stats.shares) || 0,
@@ -543,6 +645,56 @@ const incrementItemStat = async ({ item, action }) => {
     updatedAt: new Date().toISOString(),
   });
   return updated;
+};
+
+const resolveViewActorId = ({ ctx, user }) => {
+  if (user && typeof user.id === "string" && user.id.trim()) {
+    return `u:${user.id.trim()}`;
+  }
+  const clientId = getClientId({
+    event: (ctx && ctx.event) || {},
+    context: (ctx && ctx.state && ctx.state.context) || (ctx && ctx.context) || {},
+  });
+  if (!clientId || clientId === "anonymous") {
+    return "";
+  }
+  return `c:${clientId}`;
+};
+
+const recordItemView = async ({ ctx, item, user }) => {
+  if (!item || !item._id) return item;
+  const actorId = resolveViewActorId({ ctx, user });
+  if (!actorId) return item;
+
+  const key = buildInteractionKey({
+    action: "view",
+    itemId: item._id,
+    actorId,
+  });
+  const existing = await findInteractionByKey(key);
+  if (existing) {
+    return item;
+  }
+
+  try {
+    await createInteraction({
+      key,
+      itemId: item._id,
+      userId: user && user.id ? user.id : "",
+      actorId,
+      action: "view",
+      createdAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    if (isDuplicateInteractionError(err)) {
+      const latest = await getItemById(item._id);
+      return latest || item;
+    }
+    throw err;
+  }
+
+  const updated = await incrementItemStat({ item, action: "view" });
+  return updated || item;
 };
 
 const interactItemPost = async ({ itemId, user, action }) => {
@@ -617,6 +769,7 @@ const interactItemPost = async ({ itemId, user, action }) => {
 module.exports = {
   listItems,
   listItemsByIds,
+  hasMoreAnonymousPublicItemsThanLimit,
   getItemDetail,
   createItemPost,
   updateItemPost,

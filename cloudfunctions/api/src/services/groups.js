@@ -5,6 +5,8 @@ const {
   createGroup,
   updateGroupByIdIfUnchanged,
 } = require("../repositories/groups");
+const { findUsersByUserIds } = require("../repositories/users");
+const { createNotification } = require("../repositories/notifications");
 const { runIdempotentIfPresent } = require("./idempotency");
 
 const GROUP_MAX_MEMBERS = 30;
@@ -45,6 +47,53 @@ const ensureGroupAdmin = (group, userId) => {
       expose: true,
     });
   }
+};
+
+const buildMemberProfiles = async ({ memberIds = [], adminId = "" } = {}) => {
+  const normalized = Array.from(
+    new Set(
+      (Array.isArray(memberIds) ? memberIds : [])
+        .map((id) => (typeof id === "string" ? id.trim() : ""))
+        .filter(Boolean)
+    )
+  );
+  if (!normalized.length) return [];
+
+  const userDocs = await findUsersByUserIds(normalized);
+  const userById = new Map();
+  userDocs.forEach((doc) => {
+    const userId = doc && typeof doc.userId === "string" ? doc.userId : "";
+    if (userId) {
+      userById.set(userId, doc);
+    }
+  });
+
+  return normalized.map((userId) => {
+    const user = userById.get(userId);
+    const isCaptain = userId === adminId;
+    return {
+      userId,
+      nickname: (user && user.nickname) || "",
+      avatar: (user && user.avatar) || "",
+      role: isCaptain ? "admin" : "member",
+      isCaptain,
+      ...(user && user.nicknameSource ? { nicknameSource: user.nicknameSource } : {}),
+      ...(user && user.avatarSource ? { avatarSource: user.avatarSource } : {}),
+    };
+  });
+};
+
+const toGroupDetailView = async (group) => {
+  const memberIds = Array.isArray(group && group.members) ? group.members : [];
+  const memberProfiles = await buildMemberProfiles({
+    memberIds,
+    adminId: (group && group.adminId) || "",
+  });
+  return {
+    ...group,
+    memberCount: memberIds.length,
+    memberProfiles,
+  };
 };
 
 const listGroups = async ({ user, page, pageSize }) => {
@@ -124,11 +173,39 @@ const getGroupDetailForUser = async ({ user, groupId }) => {
       expose: true,
     });
   }
-  return group;
+  return toGroupDetailView(group);
+};
+
+const notifyCaptainMemberJoined = async ({ captainId, groupId, groupName, memberId }) => {
+  if (!captainId || captainId === memberId) {
+    return false;
+  }
+
+  try {
+    const memberDocs = await findUsersByUserIds([memberId]);
+    const member = Array.isArray(memberDocs) && memberDocs.length > 0 ? memberDocs[0] : null;
+    const now = new Date().toISOString();
+    await createNotification({
+      userId: captainId,
+      type: "group_member_joined",
+      title: "新成员加入组队",
+      payload: {
+        groupId,
+        groupName: groupName || "",
+        memberId,
+        memberNickname: (member && member.nickname) || "",
+      },
+      read: false,
+      createdAt: now,
+    });
+    return true;
+  } catch (_err) {
+    return false;
+  }
 };
 
 const joinGroupForUser = async ({ ctx, user, groupId }) => {
-  return runIdempotentIfPresent({
+  const result = await runIdempotentIfPresent({
     ctx,
     path: "/api/v1/groups/:id/join",
     userId: user.id,
@@ -138,7 +215,15 @@ const joinGroupForUser = async ({ ctx, user, groupId }) => {
         groupId,
         mutate: async (group) => {
           if (isGroupMember(group, user.id)) {
-            return { type: "noop", result: { joined: true } };
+            return {
+              type: "noop",
+              result: {
+                joined: true,
+                newlyJoined: false,
+                captainId: group.adminId || "",
+                groupName: group.name || "",
+              },
+            };
           }
           const members = Array.isArray(group.members) ? [...group.members] : [];
           if (members.length >= GROUP_MAX_MEMBERS) {
@@ -156,11 +241,32 @@ const joinGroupForUser = async ({ ctx, user, groupId }) => {
               members,
               updatedAt: new Date().toISOString(),
             },
-            result: { joined: true },
+            result: {
+              joined: true,
+              newlyJoined: true,
+              captainId: group.adminId || "",
+              groupName: group.name || "",
+            },
           };
         },
       }),
   });
+
+  const joined = Boolean(result && result.joined);
+  const shouldNotify = Boolean(result && result.newlyJoined);
+  const notifiedCaptain = shouldNotify
+    ? await notifyCaptainMemberJoined({
+        captainId: result.captainId,
+        groupId,
+        groupName: result.groupName,
+        memberId: user.id,
+      })
+    : false;
+
+  return {
+    joined,
+    notifiedCaptain,
+  };
 };
 
 const leaveGroupForUser = async ({ ctx, user, groupId }) => {
@@ -206,6 +312,34 @@ const leaveGroupForUser = async ({ ctx, user, groupId }) => {
               updatedAt: new Date().toISOString(),
             },
             result: { left: true },
+          };
+        },
+      }),
+  });
+};
+
+const disbandGroupForUser = async ({ ctx, user, groupId }) => {
+  return runIdempotentIfPresent({
+    ctx,
+    path: "/api/v1/groups/:id/disband",
+    userId: user.id,
+    payload: { id: groupId },
+    execute: async () =>
+      updateGroupWithRetry({
+        groupId,
+        mutate: async (group) => {
+          ensureGroupAdmin(group, user.id);
+          if (group.status === "closed") {
+            return { type: "noop", result: { disbanded: true } };
+          }
+          return {
+            type: "write",
+            updates: {
+              members: [],
+              status: "closed",
+              updatedAt: new Date().toISOString(),
+            },
+            result: { disbanded: true },
           };
         },
       }),
@@ -297,6 +431,14 @@ const kickGroupMemberForUser = async ({ ctx, user, groupId, userId }) => {
             });
           }
           const members = Array.isArray(group.members) ? [...group.members] : [];
+          if (!members.includes(userId)) {
+            throw createAppError({
+              code: "VALIDATION_FAILED",
+              status: 400,
+              message: "target user is not a group member",
+              expose: true,
+            });
+          }
           const nextMembers = members.filter((id) => id !== userId);
           return {
             type: "write",
@@ -320,6 +462,7 @@ module.exports = {
   getGroupDetailForUser,
   joinGroupForUser,
   leaveGroupForUser,
+  disbandGroupForUser,
   transferGroupAdminForUser,
   updateGroupPrivacyForUser,
   kickGroupMemberForUser,

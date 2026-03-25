@@ -9,22 +9,38 @@ const AUTH_ERROR = createAppError({
   expose: true,
 });
 
+const resolveJwtSecret = () => {
+  const secret = process.env.JWT_SECRET;
+  if (typeof secret === "string" && secret.trim()) {
+    return secret.trim();
+  }
+  if (process.env.IS_LOCAL_DEV === "true") {
+    return "dev-secret";
+  }
+  throw createAppError({
+    code: "INTERNAL_ERROR",
+    status: 500,
+    message: "Missing JWT_SECRET",
+    expose: false,
+  });
+};
+
 const authMiddleware = async (ctx, next) => {
-  const attached = attachUserFromToken(ctx);
+  const attached = await attachUserFromToken(ctx);
   if (!attached) {
     throw AUTH_ERROR;
   }
   await next();
 };
 
-const attachUserFromToken = (ctx) => {
+const attachUserFromToken = async (ctx) => {
   const token = extractToken(ctx);
   if (!token) {
     return false;
   }
   try {
-    const payload = verifyJwt(token, process.env.JWT_SECRET || "dev-secret");
-    if (isAccessTokenRevoked(payload)) {
+    const payload = verifyJwt(token, resolveJwtSecret());
+    if (await isAccessTokenRevoked(payload)) {
       throw AUTH_ERROR;
     }
     ctx.state.user = {
@@ -38,6 +54,9 @@ const attachUserFromToken = (ctx) => {
     };
     return true;
   } catch (err) {
+    if (err && err.code === "INTERNAL_ERROR") {
+      throw err;
+    }
     throw AUTH_ERROR;
   }
 };

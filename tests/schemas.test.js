@@ -1,12 +1,24 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  refreshTokenSchema,
   itemCreateSchema,
   itemUpdateSchema,
   fuelRecordCreateSchema,
   usersProfileUpdateSchema,
   groupCreateSchema,
 } = require("../cloudfunctions/api/src/schemas");
+
+test("refreshTokenSchema requires refreshToken", () => {
+  assert.throws(() => refreshTokenSchema({}), /refreshToken is required/);
+});
+
+test("refreshTokenSchema trims refreshToken", () => {
+  const payload = refreshTokenSchema({
+    refreshToken: "  abcdefgh-1234-5678-90ab-abcdefghijkl  ",
+  });
+  assert.equal(payload.refreshToken, "abcdefgh-1234-5678-90ab-abcdefghijkl");
+});
 
 test("itemCreateSchema accepts valid route payload", () => {
   const payload = itemCreateSchema({
@@ -58,15 +70,31 @@ test("fuelRecordCreateSchema normalizes numeric fields", () => {
   const payload = fuelRecordCreateSchema({
     vehicleId: "veh_1",
     pricePerL: "8.35",
+    fuelLiters: "23.9522",
     amountPaid: "200",
     odometerKm: "15230.5",
     isFull: "true",
     note: "full tank",
   });
   assert.equal(payload.pricePerL, 8.35);
+  assert.equal(payload.fuelLiters, 23.952);
   assert.equal(payload.amountPaid, 200);
   assert.equal(payload.odometerKm, 15230.5);
   assert.equal(payload.isFull, true);
+});
+
+test("fuelRecordCreateSchema requires fuelLiters", () => {
+  assert.throws(
+    () =>
+      fuelRecordCreateSchema({
+        vehicleId: "veh_1",
+        pricePerL: "8.35",
+        amountPaid: "200",
+        odometerKm: "15230.5",
+        isFull: "true",
+      }),
+    /fuelLiters must be > 0/
+  );
 });
 
 test("usersProfileUpdateSchema rejects unsupported avatarSource", () => {

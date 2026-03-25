@@ -2,11 +2,12 @@ const { logger } = require("../utils/logger");
 const { captureException, captureMessage, isSentryEnabled } = require("../utils/sentry");
 const { toAppError } = require("../utils/app-error");
 const { classifyError } = require("../utils/error-classification");
+const { resolveClientErrorMessage } = require("../utils/client-error-message");
 
 const buildClientError = (error, requestId) => {
   const payload = {
     code: error.code,
-    message: error.expose ? error.message : "Internal error",
+    message: resolveClientErrorMessage(error),
     status: error.status,
   };
   const details = {
