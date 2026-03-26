@@ -1,13 +1,32 @@
 const isLocalDev = () => process.env.IS_LOCAL_DEV === "true";
+const isDebugLogEnabled = () => process.env.SENTRY_DEBUG_LOG === "true";
+const getAppEnvironment = () => process.env.APP_ENV || process.env.NODE_ENV || "unknown";
+const getSentryEnvironment = () =>
+  process.env.SENTRY_ENV || process.env.APP_ENV || process.env.NODE_ENV || "unknown";
+const isForceEnabled = () => process.env.SENTRY_FORCE_ENABLE === "true";
+const isMainEnv = () => getAppEnvironment() === "main";
+let sentryModuleAvailable;
 
-const isEnabled = () => {
-  if (isLocalDev()) return false;
-  if (process.env.SENTRY_ENABLED !== "true") return false;
-  if (!process.env.SENTRY_DSN) return false;
-  return true;
+const hasSentryModule = () => {
+  if (typeof sentryModuleAvailable === "boolean") return sentryModuleAvailable;
+  try {
+    require.resolve("@sentry/node");
+    sentryModuleAvailable = true;
+  } catch (_err) {
+    sentryModuleAvailable = false;
+  }
+  return sentryModuleAvailable;
 };
 
-const getEnvironment = () => process.env.APP_ENV || process.env.NODE_ENV || "unknown";
+const isEnabled = () => {
+  if (process.env.SENTRY_ENABLED !== "true") return false;
+  if (!process.env.SENTRY_DSN) return false;
+  if (!hasSentryModule()) return false;
+  if (isForceEnabled()) return true;
+  if (isLocalDev()) return false;
+  if (!isMainEnv()) return false;
+  return true;
+};
 
 let sentryClient = null;
 let initTried = false;
@@ -25,13 +44,17 @@ const getSentry = () => {
     const Sentry = require("@sentry/node");
     Sentry.init({
       dsn: process.env.SENTRY_DSN,
-      environment: getEnvironment(),
+      environment: getSentryEnvironment(),
       release: process.env.SENTRY_RELEASE || undefined,
       tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE || 0),
     });
+    if (isDebugLogEnabled()) {
+      console.log("[sentry] initialized");
+    }
     sentryClient = Sentry;
     return sentryClient;
-  } catch (_err) {
+  } catch (err) {
+    console.warn("[sentry] disabled:", err && err.message ? err.message : err);
     return null;
   }
 };
@@ -78,38 +101,51 @@ const applyScope = (scope, options = {}) => {
 
 const flushIfNeeded = async (Sentry) => {
   try {
-    await Sentry.flush(1500);
-  } catch (_err) {
-    // ignore flush errors
+    const flushed = await Sentry.flush(5000);
+    if (!flushed) {
+      console.warn("[sentry] flush timeout");
+    }
+  } catch (err) {
+    console.error("[sentry] flush failed:", err && err.message ? err.message : err);
   }
 };
 
 const captureException = async (error, context = {}) => {
   const Sentry = getSentry();
-  if (!Sentry) return;
+  if (!Sentry) return null;
 
   const err = error instanceof Error ? error : new Error(String(error));
   const options = toScopeOptions(context);
+  let eventId = null;
   Sentry.withScope((scope) => {
     applyScope(scope, options);
-    Sentry.captureException(err);
+    eventId = Sentry.captureException(err);
+    if (isDebugLogEnabled()) {
+      console.log("[sentry] captured exception:", eventId);
+    }
   });
   await flushIfNeeded(Sentry);
+  return eventId;
 };
 
 const captureMessage = async (message, options = {}) => {
   const Sentry = getSentry();
-  if (!Sentry) return;
+  if (!Sentry) return null;
 
   const text = String(message || "");
-  if (!text) return;
+  if (!text) return null;
 
   const scopeOptions = toScopeOptions(options);
+  let eventId = null;
   Sentry.withScope((scope) => {
     applyScope(scope, scopeOptions);
-    Sentry.captureMessage(text, scopeOptions.level || "error");
+    eventId = Sentry.captureMessage(text, scopeOptions.level || "error");
+    if (isDebugLogEnabled()) {
+      console.log("[sentry] captured message:", eventId);
+    }
   });
   await flushIfNeeded(Sentry);
+  return eventId;
 };
 
 const setUser = (scopeOptions = {}, user = null) => {

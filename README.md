@@ -32,6 +32,20 @@ pnpm install
 pnpm --dir cloudfunctions/api install
 ```
 
+## 测试与契约
+
+运行后端基础回归测试（schema 校验 + 幂等入口 + 契约一致性）：
+
+```bash
+pnpm test
+```
+
+机器可读接口契约：
+- `docs/api-contract.v1.json`
+
+说明：
+- 契约中的 `alias` 与云函数路由表一一对应，`tests/api-contract.test.js` 会校验别名是否仍存在，避免文档与代码漂移。
+
 ## 本地联调（前端只切 baseURL）
 
 1) 启动本地后端网关：
@@ -44,6 +58,12 @@ pnpm run dev:api
 可选环境变量：
 - `API_LOCAL_HOST`（默认 `127.0.0.1`）
 - `API_LOCAL_PORT`（默认 `3100`）
+- `ALLOW_LOCAL_LOGIN_FALLBACK=true`（本地联调允许 `login` 使用本地 openid 回退）
+- `RATE_LIMITS_BACKEND`（`db|memory`，默认 `db`）
+- `LOGIN_RATE_LIMIT_PER_HOUR`（默认 `30`）
+- `ANON_FEED_QUOTA_PER_DAY`（默认 `10`，未登录快照最大条数）
+- `ACCESS_TOKEN_TTL_SEC`（默认 `7200`）
+- `REFRESH_TOKEN_TTL_SEC`（默认 `2592000`）
 
 2) 前端切换本地地址：
 - `UNI_APP_API_ENV=local`
@@ -52,9 +72,58 @@ pnpm run dev:api
 3) 当前已映射路由：
 - `GET /api/v1/health`
 - `POST /api/v1/login`
-- `GET /api/v1/items`
-
+- `POST /api/v1/token/refresh`
+- `POST /api/v1/logout`
+- `GET /api/v1/users/me`
+- `PUT /api/v1/users/me/profile`
+- `GET /api/v1/users/me/preferences`
+- `PUT /api/v1/users/me/preferences`
+- `GET /api/v1/community/feed`
+- `POST /api/v1/posts`
+- `GET /api/v1/posts/:id`
+- `PUT /api/v1/posts/:id`
+- `DELETE /api/v1/posts/:id`
+- `POST /api/v1/posts/:id/like`
+- `POST /api/v1/posts/:id/recommend`
+- `POST /api/v1/posts/:id/share`
+- `POST /api/v1/feedback`
+- `GET /api/v1/groups`
+- `POST /api/v1/groups`
+- `GET /api/v1/groups/:id`
+- `POST /api/v1/groups/:id/join`
+- `POST /api/v1/groups/:id/leave`
+- `POST /api/v1/groups/:id/disband`
+- `POST /api/v1/groups/:id/transfer`
+- `PATCH /api/v1/groups/:id/privacy`
+- `POST /api/v1/groups/:id/kick`
+- `GET /api/v1/vehicle-catalog/brands`
+- `GET /api/v1/vehicle-catalog`
+- `GET /api/v1/vehicles`
+- `POST /api/v1/vehicles`
+- `PUT /api/v1/vehicles/:id`
+- `DELETE /api/v1/vehicles/:id`
+- `GET /api/v1/fuel-records`
+- `POST /api/v1/fuel-records`
+- `PATCH /api/v1/fuel-records/:id`
+- `DELETE /api/v1/fuel-records/:id`
 新增云函数路由时，需要同步在 `scripts/dev-server.js` 增加映射。
+
+社区列表可见性规则（`GET /api/v1/community/feed`）：
+- 未登录：仅 `public`
+- 已登录：`public` + 本人内容（含 `private`）+ 所属组内容（`visibility=group`）
+- 未登录设备标识：匿名请求需提供 `x-device-id`（小程序 `OPENID` 可作为身份兜底）。
+- 未登录快照：仅当公开数据量大于 10 条时启用；按“设备 + 查询条件（sort/city/type/tag/定位分桶）+ 中国自然日（UTC+8）”固化快照，同维度当日后续请求返回同一批快照，不再返回 429 配额错误。
+- 未登录实时：当公开数据量 <= 10 条时，直接返回实时列表（`frozen=false`）。
+- 关联组队内容会聚合返回 `groupSummary`：`id/name/memberCount/memberAvatars`。
+- 头像字段统一转换：接口返回前会批量把 `cloud://` 头像 fileID 转为可访问临时 URL（内存缓存 1 天）；`author.avatar` 会同时保留 `author.avatarFileId`。
+
+组队规则补充：
+- `POST /api/v1/groups/:id/join` 返回 `{ joined, notifiedCaptain }`；新成员首次加入成功时，后端会 best-effort 写入队长通知。
+- `GET /api/v1/groups/:id` 额外返回 `memberCount` 与 `memberProfiles`（含 `userId/nickname/avatar/avatarFileId`，其中 `avatar` 为可访问 URL）。
+
+写接口幂等策略：
+- 强制（缺 `Idempotency-Key` 会报错）：`POST /api/v1/posts`、`POST /api/v1/fuel-records`
+- 兼容（有 `Idempotency-Key` 启用幂等，无 key 按资源语义处理）：其余写接口（`vehicles/groups/feedback/posts.update/fuel-records.patch`）
 
 ## 免费套餐推荐接入（wx.cloud.callFunction）
 
@@ -70,13 +139,25 @@ wx.cloud.callFunction({
 });
 ```
 
+`refresh` 接口请在 body 传 `refreshToken`（不要在 `Authorization` 里传 access token）：
+
+```js
+wx.cloud.callFunction({
+  name: "api",
+  data: {
+    $url: "api/v1/token/refresh",
+    refreshToken,
+  },
+});
+```
+
 受保护路由可通过 `data.headers.Authorization` 透传 JWT：
 
 ```js
 wx.cloud.callFunction({
   name: "api",
   data: {
-    $url: "api/v1/items",
+    $url: "api/v1/community/feed",
     headers: { Authorization: `Bearer ${token}` },
     page: 1,
     pageSize: 10,
@@ -85,9 +166,14 @@ wx.cloud.callFunction({
 });
 ```
 
-当前云函数已兼容两套 `$url`：
-- 简写：`health` / `login` / `items.list`
-- HTTP 风格：`api/v1/health` / `api/v1/login` / `api/v1/items`
+当前云函数 `$url`：
+- 简写：`health` / `login` / `token.refresh` / `feed.list`
+- HTTP 风格：`api/v1/health` / `api/v1/login` / `api/v1/token/refresh` / `api/v1/community/feed`
+
+车型品牌总表接口（前端“先选品牌”）：
+- `GET /api/v1/vehicle-catalog/brands`
+- query: `keyword?`, `page`(默认 1), `pageSize`(默认 50, 最大 200)
+- response: `list: [{ brand, topHotRank, modelCount }]`
 
 ## CI/CD（GitHub Actions）
 
@@ -117,16 +203,48 @@ wx.cloud.callFunction({
 启用条件（同时满足才会上报）：
 - `SENTRY_ENABLED=true`
 - `SENTRY_DSN` 已配置
+- `APP_ENV=main`
 - 非本地联调（`IS_LOCAL_DEV=true` 时强制不上报）
+
+环境名说明：
+- 上报开关判断仍基于 `APP_ENV`（仅 `main` 默认上报）
+- Sentry 事件里的 `environment` 字段优先使用 `SENTRY_ENV`，未配置时回退到 `APP_ENV`
+
+dev 联调测试（按需临时开启）：
+- 额外设置 `SENTRY_FORCE_ENABLE=true` 可绕过 `APP_ENV/IS_LOCAL_DEV` 限制，用于验证上报链路。
+- 建议仅在短时联调使用，验证后关闭，避免 dev 噪声进入正式告警。
 
 推荐在云函数 `api` 的运行时环境变量中配置：
 - `SENTRY_ENABLED=true`
 - `SENTRY_DSN=<your sentry dsn>`
 - `APP_ENV=main`
+- `SENTRY_ENV=production`（可选，推荐；用于 Sentry 展示环境名）
 - `SENTRY_RELEASE`（可选，建议填版本号或 commit）
 - `SENTRY_TRACES_SAMPLE_RATE`（可选，默认 `0`）
 
 本地 `pnpm run dev:api` 联调默认不触发上报，用于避免 dev 噪声数据进入 Sentry。
+
+### 本地/线上上报策略（推荐）
+
+- 本地默认不上报：`pnpm run dev:api`（不设置 `SENTRY_FORCE_ENABLE`）
+- 本地临时上报：只改本地 `.env.local` 后重启 `dev:api`
+- main 发布后自动上报：保持云函数 `api` 环境变量为 `SENTRY_ENABLED=true` + `SENTRY_DSN` + `APP_ENV=main`
+
+本地配置文件位置：`moto-diary-backend/.env.local`（仅本地使用，不提交）
+
+可直接使用：
+
+```bash
+# 默认不开启本地 Sentry（注释/删除 SENTRY_FORCE_ENABLE 即可）
+SENTRY_ENABLED=true
+SENTRY_DSN=<your sentry dsn>
+APP_ENV=dev
+SENTRY_ENV=local
+# SENTRY_FORCE_ENABLE=true
+```
+
+当你需要本地验证上报时，取消注释 `SENTRY_FORCE_ENABLE=true`，保存并重启 `pnpm run dev:api`。
+验证完成后再注释掉，恢复本地默认不上报。
 
 业务代码可直接复用封装：
 
@@ -173,6 +291,11 @@ node scripts/import-catalog.js --env <TCB_ENV_ID> --file ../crawler_output/vehic
 `vehicle_catalog`：
 - `idx_brand_hotRank`：`brand` asc + `hotRank` asc
 - `uniq_model_id`：`model_id` asc unique
+
+`rate_limits`：
+- `uniq_key`：`key` asc unique
+- `idx_scope_subject`：`scope` asc + `subject` asc
+- `ttl_expiredAt`：`expiredAt` TTL
 
 ## 常见问题
 

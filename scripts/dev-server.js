@@ -1,7 +1,40 @@
 #!/usr/bin/env node
 const http = require("http");
 const { randomUUID } = require("crypto");
+const fs = require("fs");
 const path = require("path");
+
+const parseEnvValue = (raw = "") => {
+  const value = String(raw).trim();
+  if (!value) return "";
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1);
+  }
+  return value;
+};
+
+const loadLocalEnvFile = (filePath) => {
+  if (!filePath || !fs.existsSync(filePath)) return;
+  const content = fs.readFileSync(filePath, "utf8");
+  const lines = content.split(/\r?\n/);
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) return;
+    const normalized = trimmed.startsWith("export ") ? trimmed.slice(7).trim() : trimmed;
+    const index = normalized.indexOf("=");
+    if (index <= 0) return;
+    const key = normalized.slice(0, index).trim();
+    if (!key || process.env[key] !== undefined) return;
+    const value = parseEnvValue(normalized.slice(index + 1));
+    process.env[key] = value;
+  });
+};
+
+const localEnvFile = process.env.API_LOCAL_ENV_FILE || path.resolve(__dirname, "../.env.local");
+loadLocalEnvFile(localEnvFile);
 
 const PORT = Number(process.env.API_LOCAL_PORT || 3100);
 const HOST = process.env.API_LOCAL_HOST || "127.0.0.1";
@@ -10,7 +43,173 @@ process.env.IS_LOCAL_DEV = "true";
 const routeMap = {
   "GET /api/v1/health": "health",
   "POST /api/v1/login": "login",
-  "GET /api/v1/items": "items.list",
+  "POST /api/v1/token/refresh": "token.refresh",
+  "POST /api/v1/logout": "logout",
+  "GET /api/v1/users/me": "users.me",
+  "PUT /api/v1/users/me/profile": "users.updateProfile",
+  "GET /api/v1/users/me/preferences": "users.preferences",
+  "PUT /api/v1/users/me/preferences": "users.updatePreferences",
+  "GET /api/v1/community/feed": "feed.list",
+  "POST /api/v1/posts": "posts.create",
+  "POST /api/v1/feedback": "feedback.create",
+  "GET /api/v1/vehicle-catalog/brands": "vehicle.catalog.brands",
+  "GET /api/v1/vehicle-catalog": "vehicle.catalog",
+  "GET /api/v1/vehicles": "vehicles.list",
+  "POST /api/v1/vehicles": "vehicles.create",
+  "GET /api/v1/fuel-records": "fuel-records.list",
+  "POST /api/v1/fuel-records": "fuel-records.create",
+  "GET /api/v1/groups": "groups.list",
+  "POST /api/v1/groups": "groups.create",
+};
+
+const dynamicRouteMatchers = [
+  {
+    method: "GET",
+    pattern: /^\/api\/v1\/posts\/([^/]+)$/,
+    build: (match) => ({
+      route: "posts.detail",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+  {
+    method: "PUT",
+    pattern: /^\/api\/v1\/posts\/([^/]+)$/,
+    build: (match) => ({
+      route: "posts.update",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+  {
+    method: "DELETE",
+    pattern: /^\/api\/v1\/posts\/([^/]+)$/,
+    build: (match) => ({
+      route: "posts.delete",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+  {
+    method: "POST",
+    pattern: /^\/api\/v1\/posts\/([^/]+)\/like$/,
+    build: (match) => ({
+      route: "posts.like",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+  {
+    method: "POST",
+    pattern: /^\/api\/v1\/posts\/([^/]+)\/recommend$/,
+    build: (match) => ({
+      route: "posts.recommend",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+  {
+    method: "POST",
+    pattern: /^\/api\/v1\/posts\/([^/]+)\/share$/,
+    build: (match) => ({
+      route: "posts.share",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+  {
+    method: "PUT",
+    pattern: /^\/api\/v1\/vehicles\/([^/]+)$/,
+    build: (match) => ({
+      route: "vehicles.update",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+  {
+    method: "DELETE",
+    pattern: /^\/api\/v1\/vehicles\/([^/]+)$/,
+    build: (match) => ({
+      route: "vehicles.delete",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+  {
+    method: "PATCH",
+    pattern: /^\/api\/v1\/fuel-records\/([^/]+)$/,
+    build: (match) => ({
+      route: "fuel-records.update",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+  {
+    method: "DELETE",
+    pattern: /^\/api\/v1\/fuel-records\/([^/]+)$/,
+    build: (match) => ({
+      route: "fuel-records.delete",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+  {
+    method: "GET",
+    pattern: /^\/api\/v1\/groups\/([^/]+)$/,
+    build: (match) => ({
+      route: "groups.detail",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+  {
+    method: "POST",
+    pattern: /^\/api\/v1\/groups\/([^/]+)\/join$/,
+    build: (match) => ({
+      route: "groups.join",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+  {
+    method: "POST",
+    pattern: /^\/api\/v1\/groups\/([^/]+)\/leave$/,
+    build: (match) => ({
+      route: "groups.leave",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+  {
+    method: "POST",
+    pattern: /^\/api\/v1\/groups\/([^/]+)\/disband$/,
+    build: (match) => ({
+      route: "groups.disband",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+  {
+    method: "POST",
+    pattern: /^\/api\/v1\/groups\/([^/]+)\/transfer$/,
+    build: (match) => ({
+      route: "groups.transfer",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+  {
+    method: "PATCH",
+    pattern: /^\/api\/v1\/groups\/([^/]+)\/privacy$/,
+    build: (match) => ({
+      route: "groups.privacy",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+  {
+    method: "POST",
+    pattern: /^\/api\/v1\/groups\/([^/]+)\/kick$/,
+    build: (match) => ({
+      route: "groups.kick",
+      payload: { id: decodeURIComponent(match[1]) },
+    }),
+  },
+];
+
+const resolveRoute = (method, pathname) => {
+  const staticRoute = routeMap[`${method} ${pathname}`];
+  if (staticRoute) {
+    return { route: staticRoute, payload: {} };
+  }
+  const matcher = dynamicRouteMatchers.find((item) => item.method === method && item.pattern.test(pathname));
+  if (!matcher) return null;
+  const matched = pathname.match(matcher.pattern);
+  return matcher.build(matched);
 };
 
 let apiMain;
@@ -49,24 +248,25 @@ const server = http.createServer(async (req, res) => {
   }
 
   const url = new URL(req.url || "/", `http://${req.headers.host || `${HOST}:${PORT}`}`);
-  const routeKey = `${req.method} ${url.pathname}`;
-  const mapped = routeMap[routeKey];
-  if (!mapped) {
+  const resolved = resolveRoute(req.method, url.pathname);
+  if (!resolved) {
     return sendJson(res, 404, {
       success: false,
-      error: { code: "NOT_FOUND", message: `No local route mapped for ${routeKey}` },
+      error: { code: "NOT_FOUND", message: `No local route mapped for ${req.method} ${url.pathname}` },
     });
   }
 
   try {
     const rawBody = await readBody(req);
     const event = {
-      $url: mapped,
+      $url: resolved.route,
       path: url.pathname,
       httpMethod: req.method,
+      __responseMode: "http",
       headers: req.headers || {},
       queryStringParameters: Object.fromEntries(url.searchParams.entries()),
       body: rawBody || undefined,
+      ...resolved.payload,
     };
     const context = {
       requestId: randomUUID(),
@@ -99,4 +299,5 @@ server.listen(PORT, HOST, () => {
   console.log(`Local API server running at http://${HOST}:${PORT}`);
   console.log("Mapped routes:");
   Object.entries(routeMap).forEach(([k, v]) => console.log(`  ${k} -> ${v}`));
+  dynamicRouteMatchers.forEach((item) => console.log(`  ${item.method} ${item.pattern} -> dynamic`));
 });

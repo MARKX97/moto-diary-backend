@@ -1,0 +1,73 @@
+{
+  "version": "1.0.0",
+  "service": "moto-diary-api",
+  "basePath": "/api/v1",
+  "responseEnvelope": {
+    "success": "boolean",
+    "data": "object | array | null",
+    "error": {
+      "code": "string",
+      "message": "string",
+      "details": "object | undefined"
+    }
+  },
+  "idempotency": {
+    "required": [
+      "POST /api/v1/posts",
+      "POST /api/v1/fuel-records"
+    ],
+    "optional": [
+      "PUT /api/v1/posts/{id}",
+      "POST /api/v1/vehicles",
+      "PUT /api/v1/vehicles/{id}",
+      "DELETE /api/v1/vehicles/{id}",
+      "PATCH /api/v1/fuel-records/{id}",
+      "POST /api/v1/groups",
+      "POST /api/v1/groups/{id}/join",
+      "POST /api/v1/groups/{id}/leave",
+      "POST /api/v1/groups/{id}/disband",
+      "POST /api/v1/groups/{id}/transfer",
+      "PATCH /api/v1/groups/{id}/privacy",
+      "POST /api/v1/groups/{id}/kick",
+      "POST /api/v1/feedback"
+    ]
+  },
+  "endpoints": [
+    { "alias": "health", "method": "GET", "path": "/api/v1/health", "auth": "none", "idempotency": "none" },
+    { "alias": "login", "method": "POST", "path": "/api/v1/login", "auth": "none", "idempotency": "none" },
+    { "alias": "token.refresh", "method": "POST", "path": "/api/v1/token/refresh", "auth": "none", "idempotency": "none" },
+    { "alias": "logout", "method": "POST", "path": "/api/v1/logout", "auth": "required", "idempotency": "semantic" },
+    { "alias": "users.me", "method": "GET", "path": "/api/v1/users/me", "auth": "required", "idempotency": "none" },
+    { "alias": "users.updateProfile", "method": "PUT", "path": "/api/v1/users/me/profile", "auth": "required", "idempotency": "none" },
+    { "alias": "users.preferences", "method": "GET", "path": "/api/v1/users/me/preferences", "auth": "required", "idempotency": "none" },
+    { "alias": "users.updatePreferences", "method": "PUT", "path": "/api/v1/users/me/preferences", "auth": "required", "idempotency": "none" },
+    { "alias": "feed.list", "method": "GET", "path": "/api/v1/community/feed", "auth": "optional", "idempotency": "none" },
+    { "alias": "posts.create", "method": "POST", "path": "/api/v1/posts", "auth": "required", "idempotency": "required" },
+    { "alias": "posts.detail", "method": "GET", "path": "/api/v1/posts/{id}", "auth": "optional", "idempotency": "none" },
+    { "alias": "posts.update", "method": "PUT", "path": "/api/v1/posts/{id}", "auth": "required", "idempotency": "optional" },
+    { "alias": "posts.delete", "method": "DELETE", "path": "/api/v1/posts/{id}", "auth": "required", "idempotency": "semantic" },
+    { "alias": "posts.like", "method": "POST", "path": "/api/v1/posts/{id}/like", "auth": "required", "idempotency": "semantic" },
+    { "alias": "posts.recommend", "method": "POST", "path": "/api/v1/posts/{id}/recommend", "auth": "required", "idempotency": "semantic" },
+    { "alias": "posts.share", "method": "POST", "path": "/api/v1/posts/{id}/share", "auth": "required", "idempotency": "semantic" },
+    { "alias": "vehicle.catalog.brands", "method": "GET", "path": "/api/v1/vehicle-catalog/brands", "auth": "none", "idempotency": "none" },
+    { "alias": "vehicle.catalog", "method": "GET", "path": "/api/v1/vehicle-catalog", "auth": "none", "idempotency": "none" },
+    { "alias": "vehicles.list", "method": "GET", "path": "/api/v1/vehicles", "auth": "required", "idempotency": "none" },
+    { "alias": "vehicles.create", "method": "POST", "path": "/api/v1/vehicles", "auth": "required", "idempotency": "optional" },
+    { "alias": "vehicles.update", "method": "PUT", "path": "/api/v1/vehicles/{id}", "auth": "required", "idempotency": "optional" },
+    { "alias": "vehicles.delete", "method": "DELETE", "path": "/api/v1/vehicles/{id}", "auth": "required", "idempotency": "optional" },
+    { "alias": "fuel-records.list", "method": "GET", "path": "/api/v1/fuel-records", "auth": "required", "idempotency": "none" },
+    { "alias": "fuel-records.create", "method": "POST", "path": "/api/v1/fuel-records", "auth": "required", "idempotency": "required" },
+    { "alias": "fuel-records.update", "method": "PATCH", "path": "/api/v1/fuel-records/{id}", "auth": "required", "idempotency": "optional" },
+    { "alias": "fuel-records.delete", "method": "DELETE", "path": "/api/v1/fuel-records/{id}", "auth": "required", "idempotency": "semantic" },
+    { "alias": "groups.list", "method": "GET", "path": "/api/v1/groups", "auth": "required", "idempotency": "none" },
+    { "alias": "groups.create", "method": "POST", "path": "/api/v1/groups", "auth": "required", "idempotency": "optional" },
+    { "alias": "groups.detail", "method": "GET", "path": "/api/v1/groups/{id}", "auth": "required", "idempotency": "none" },
+    { "alias": "groups.join", "method": "POST", "path": "/api/v1/groups/{id}/join", "auth": "required", "idempotency": "optional" },
+    { "alias": "groups.leave", "method": "POST", "path": "/api/v1/groups/{id}/leave", "auth": "required", "idempotency": "optional" },
+    { "alias": "groups.disband", "method": "POST", "path": "/api/v1/groups/{id}/disband", "auth": "required", "idempotency": "optional" },
+    { "alias": "groups.transfer", "method": "POST", "path": "/api/v1/groups/{id}/transfer", "auth": "required", "idempotency": "optional" },
+    { "alias": "groups.privacy", "method": "PATCH", "path": "/api/v1/groups/{id}/privacy", "auth": "required", "idempotency": "optional" },
+    { "alias": "groups.kick", "method": "POST", "path": "/api/v1/groups/{id}/kick", "auth": "required", "idempotency": "optional" },
+    { "alias": "feedback.create", "method": "POST", "path": "/api/v1/feedback", "auth": "optional", "idempotency": "optional" }
+  ]
+}

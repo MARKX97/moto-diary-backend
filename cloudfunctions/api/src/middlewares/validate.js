@@ -1,7 +1,7 @@
 const { parsePayload } = require("../utils/payload");
 
-const validate = (ctx, schema) => {
-  const payload = parsePayload(ctx.event);
+const validate = (ctx, schema, rawPayload) => {
+  const payload = rawPayload && typeof rawPayload === "object" ? rawPayload : parsePayload(ctx.event);
   const result = schema(payload);
   ctx.data = result;
 };
